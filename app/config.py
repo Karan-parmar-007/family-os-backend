@@ -44,8 +44,13 @@ class AuthSettings(BaseSettings):
     RESET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
     FORGET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 15
+    CSRF_SECRET_KEY: str = ""
 
     model_config = _base_config
+
+    @property
+    def _csrf_secret(self) -> str:
+        return self.CSRF_SECRET_KEY or self.SECRET_KEY
 
 
 class EmailSettings(BaseSettings):

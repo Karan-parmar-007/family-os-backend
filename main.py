@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.main_router import main_router
+from app.api.middlewares.csrf import CSRFMiddleware
 from app.db.garage_session import GarageSession
 from app.db.mongo_session import MongoSession
 from app.db.postgress_session import PostgresSession
@@ -29,4 +30,5 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Family OS", lifespan=lifespan)
+app.add_middleware(CSRFMiddleware)
 app.include_router(main_router)
