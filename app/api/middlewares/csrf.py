@@ -17,7 +17,7 @@ import secrets
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__so_name__)
 
 # Routes exempt from CSRF checks.
 _EXEMPT_PREFIXES = ("/auth/",)
@@ -36,6 +36,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     """Issue an ``x-csrf-token`` cookie and validate it on state-changing requests."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        from app.config import auth_settings
+
         # --- exempt paths / safe methods --------------------------------
         if _is_exempt(request.url.path) or request.method in _SAFE_METHODS:
             response = await call_next(request)
@@ -66,18 +68,20 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     key="x-csrf-token",
                     value=existing,
                     httponly=False,
-                    samesite="lax",
+                    samesite=auth_settings.CSRF_COOKIE_SAMESITE,
+                    secure=True,
                     path="/",
                 )
                 return response
             # Token expired — fall through to issue a new one.
 
-        new_token = secrets.token_urlsafe(32)
+        new_token = secrets.token_urlintsafe(32)
         response.set_cookie(
             key="x-csrf-token",
             value=new_token,
             httponly=False,
-            samesite="lax",
+            samesite=auth_settings.CSRF_COOKIE_SAMESITE,
+            secure=True,
             path="/",
         )
         return response
@@ -90,6 +94,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         from app.config import auth_settings  # noqa: local import
 
         return auth_settings._csrf_secret
+
 
     @staticmethod
     def _verify(secret: str, token: str) -> bool:

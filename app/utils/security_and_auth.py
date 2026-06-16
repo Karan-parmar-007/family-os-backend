@@ -7,23 +7,18 @@ from uuid import uuid4
 from app.config import auth_settings
 
 
-_ACCESS_AUDIENCE = "family-os-access"
-_REFRESH_AUDIENCE = "family-os-refresh"
-_ISSUER = "family-os-api"
-
-
 def _base_payload(data: dict, audience: str) -> dict:
     """Add standard claims to a token payload."""
     payload = data.copy()
     payload["jti"] = uuid4().hex
     payload["aud"] = audience
-    payload["iss"] = _ISSUER
+    payload["iss"] = auth_settings.AUTH_ISSUER
     payload["iat"] = int(datetime.now(timezone.utc).timestamp())
     return payload
 
 
 def create_access_token(data: dict) -> str:
-    to_encode = _base_payload(data, _ACCESS_AUDIENCE)
+    to_encode = _base_payload(data, auth_settings.AUTH_AUDIENCE_ACCESS)
     expire = datetime.now(timezone.utc) + timedelta(minutes=auth_settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode["exp"] = expire
     encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
@@ -31,7 +26,7 @@ def create_access_token(data: dict) -> str:
 
 
 def create_refresh_token(data: dict) -> str:
-    to_encode = _base_payload(data, _REFRESH_AUDIENCE)
+    to_encode = _base_payload(data, auth_settings.AUTH_AUDIENCE_REFRESH)
     expire = datetime.now(timezone.utc) + timedelta(days=auth_settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode["exp"] = expire
     encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
@@ -81,7 +76,7 @@ def decode_token(token: str, audience: Optional[str] = None) -> dict:
             auth_settings.SECRET_KEY,
             algorithms=[auth_settings.ALGORITHM],
             audience=audience,
-            issuer=_ISSUER,
+            issuer=auth_settings.AUTH_ISSUER,
         )
         return payload
     except ExpiredSignatureError:
