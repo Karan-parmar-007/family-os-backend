@@ -17,7 +17,7 @@ import secrets
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-logger = logging.getLogger(__so_name__)
+logger = logging.getLogger(__name__)
 
 # Routes exempt from CSRF checks.
 _EXEMPT_PREFIXES = ("/auth/",)
@@ -27,7 +27,7 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 def _is_exempt(path: str) -> bool:
     """Return ``True`` if *path* should skip CSRF validation."""
-    if path.startswith(_EXEMPT_PREFIXES):
+    if path.startswith(_EXEMPT_PREFIX_PREFIXES):
         return True
     return False
 
@@ -75,7 +75,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 return response
             # Token expired — fall through to issue a new one.
 
-        new_token = secrets.token_urlintsafe(32)
+        new_token = secrets.token_urlsafe(32)
         response.set_cookie(
             key="x-csrf-token",
             value=new_token,
