@@ -60,7 +60,8 @@ class EmailSettings(BaseSettings):
     SMTP_PASSWORD: str
     SMTP_FROM_EMAIL: str
     SMTP_FROM_NAME: str = "Faminly OS"
-    
+    FRONTEND_URL: str = "http://localhost:5173"
+
     model_config = _base_config
 
 

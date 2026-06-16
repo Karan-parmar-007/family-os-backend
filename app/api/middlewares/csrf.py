@@ -4,10 +4,11 @@ CSRF protection middleware.
 
 Protects all non-safe HTTP methods (POST, PUT, DELETE, PATCH) on non-auth
 routes by requiring a valid CSRF token in the ``X-CSRF-Token`` request header.
-The token is issued as an ``x-csrf-token`` cookie on every response.
+The token is issued as a non-HttpOnly ``x-csrf-token`` cookie on every response
+so the React SPA can read it and send it in the header.
 
-Auth routes (/auth/*) are exempt — they typically serve the frontend that
-obtains the token via a prior GET or via cookie-based flow.
+Auth routes (/auth/*) are exempt — they serve the frontend that obtains the
+token via the middleware on subsequent protected requests.
 """
 
 import logging
@@ -55,12 +56,27 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # --- proceed ----------------------------------------------------
         response = await call_next(request)
 
-        # Issue a fresh token cookie for subsequent requests.
+        # Issue a fresh token cookie only if the request didn't already
+        # carry one — avoids rotating the token on every protected call.
+        existing = request.cookies.get("x-csrf-token")
+        if existing:
+            # Validate the existing token; if valid, keep it.
+            if self._verify(secret, existing):
+                response.set_cookie(
+                    key="x-csrf-token",
+                    value=existing,
+                    httponly=False,
+                    samesite="lax",
+                    path="/",
+                )
+                return response
+            # Token expired — fall through to issue a new one.
+
         new_token = secrets.token_urlsafe(32)
         response.set_cookie(
             key="x-csrf-token",
             value=new_token,
-            httponly=True,
+            httponly=False,
             samesite="lax",
             path="/",
         )
