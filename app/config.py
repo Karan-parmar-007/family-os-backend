@@ -25,7 +25,7 @@ class DatabaseSettings(BaseSettings):
     GARAGE_ENDPOINT_URL: str
     GARAGE_ACCESS_KEY: str
     GARAGE_SECRET_KEY: str
-    GARAGE_BUCK_NAME: str
+    GARAGE_BUCKET_NAME: str
     GARAGE_REGION_NAME: str
 
     model_config = _base_config
@@ -44,7 +44,9 @@ class AuthSettings(BaseSettings):
     RESET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
     FORGET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 15
+    EMAIL_CHANGE_OTP_EXPIRE_MINUTES: int = 10
     CSRF_SECRET_KEY: str = ""
+    FAMILY_INVITE_TOKEN_EXPIRE_DAYS: int = 2
     
     # New Auth & CSRF Settings
     APP_NAME: str = "family-os"
@@ -54,6 +56,11 @@ class AuthSettings(BaseSettings):
     CSRF_COOKIE_SAMESITE: str = "lax"
 
     model_config = _base_config
+
+    @property
+    def csrf_secret(self) -> str:
+        """CSRF signing secret — falls back to SECRET_KEY when unset."""
+        return self.CSRF_SECRET_KEY or self.SECRET_KEY
 
 
 class EmailSettings(BaseSettings):

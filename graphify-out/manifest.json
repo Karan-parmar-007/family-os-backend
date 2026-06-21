@@ -15,19 +15,19 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "app/api/db_dependencies.py": {
-    "mtime": 1781026116.9751549,
-    "ast_hash": "74723157a85e0c93222ab5bcf0921899",
+    "mtime": 1781943861.2319958,
+    "ast_hash": "1fd2578f5db6fb8522d7152aeb26bdf7",
     "semantic_hash": ""
   },
   "app/api/dependencies.py": {
-    "mtime": 1781025974.589323,
-    "ast_hash": "05abfd44e372bfa402069c9eb98017bf",
+    "mtime": 1781943864.4679928,
+    "ast_hash": "2f9ad3c8a9d17450169ed08194aaa5fa",
     "semantic_hash": ""
   },
   "app/api/main_router.py": {
-    "mtime": 1780676508.3774662,
-    "ast_hash": "de48556b80481eb5603570fe5d42cede",
-    "semantic_hash": "de48556b80481eb5603570fe5d42cede"
+    "mtime": 1781939303.5371447,
+    "ast_hash": "d5b875abfaa3b672bb63bd2ee5d7d48a",
+    "semantic_hash": ""
   },
   "app/api/routes/__init__.py": {
     "mtime": 1780588095.005155,
@@ -45,12 +45,12 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "app/api/routes/health/health_routes.py": {
-    "mtime": 1781025333.0832634,
+    "mtime": 1781889026.7981021,
     "ast_hash": "da5aebcd360cff76572899e391e75ad8",
     "semantic_hash": ""
   },
   "app/api/routes/health/health_service.py": {
-    "mtime": 1781025968.0400925,
+    "mtime": 1781889026.7981021,
     "ast_hash": "01b4062212863b25399d3346253314c5",
     "semantic_hash": ""
   },
@@ -60,13 +60,13 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "app/api/routes/user/model.py": {
-    "mtime": 1781024841.36964,
-    "ast_hash": "610cea05ee84f5fc781d848efa7e94cd",
+    "mtime": 1781889026.7981021,
+    "ast_hash": "4b5c95a48fc9a23da5faefdd7326ea64",
     "semantic_hash": ""
   },
   "app/config.py": {
-    "mtime": 1781025841.1094358,
-    "ast_hash": "ee8200ea870e5b344cb54765970fb98e",
+    "mtime": 1781939440.440395,
+    "ast_hash": "874e3dce969f82a5a3d3c84df0c82fd6",
     "semantic_hash": ""
   },
   "app/db/__init__.py": {
@@ -80,48 +80,178 @@
     "semantic_hash": "15e96417997940924bbc072c6a018bd8"
   },
   "app/db/postgress_session.py": {
-    "mtime": 1780594143.1393447,
-    "ast_hash": "039842d3bc9b5ca56612e145ca329b44",
-    "semantic_hash": "039842d3bc9b5ca56612e145ca329b44"
+    "mtime": 1781889026.7981021,
+    "ast_hash": "f47becb72abeee2610a63bb13cd48832",
+    "semantic_hash": ""
   },
   "main.py": {
-    "mtime": 1781025841.6969118,
-    "ast_hash": "f618bd0c30c14a192ef2c0981d7005dd",
+    "mtime": 1781889026.7981021,
+    "ast_hash": "79839a9371917a8b8955056198df4193",
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1781023252.10119,
-    "ast_hash": "37254b1ef7aa119c08fe08ebe0d8aed9",
-    "semantic_hash": "37254b1ef7aa119c08fe08ebe0d8aed9"
+    "mtime": 1781627718.6764317,
+    "ast_hash": "525db0033fc85ff91d37bb1d2b4506a9",
+    "semantic_hash": ""
   },
   "app/api/routes/health/health_schemas.py": {
-    "mtime": 1781025841.9342637,
+    "mtime": 1781889026.7981021,
     "ast_hash": "304e123ca12be01f3e3580115ee4debb",
     "semantic_hash": ""
   },
   "app/api/routes/user/user_routes.py": {
-    "mtime": 1781024876.7540922,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "mtime": 1781939452.7122312,
+    "ast_hash": "469aca73205b3e5241e0722e3c1e8375",
     "semantic_hash": ""
   },
   "app/api/routes/user/user_schemas.py": {
-    "mtime": 1781024889.716686,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "mtime": 1781939441.4628344,
+    "ast_hash": "c3c608b8702355854d6c9bf7fcef1f5e",
     "semantic_hash": ""
   },
   "app/api/routes/user/user_service.py": {
-    "mtime": 1781024864.4339561,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "mtime": 1781939303.5371447,
+    "ast_hash": "ae9a34d51bf00cc2fe8b9666bf0004c9",
     "semantic_hash": ""
   },
   "app/db/garage_session.py": {
-    "mtime": 1781025958.3531613,
+    "mtime": 1781889026.7981021,
     "ast_hash": "524d36603c4d5799797999e433fa83af",
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1781026121.2255003,
+    "mtime": 1781889026.7981021,
     "ast_hash": "11b1d0821a1f515ac15e8b48d0e75ac0",
+    "semantic_hash": ""
+  },
+  ".claude/settings.json": {
+    "mtime": 1781433779.8694327,
+    "ast_hash": "bfee062c3962c14264fd704e975a6b38",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1781632061.5014071,
+    "ast_hash": "a3d76df0d0ff4927cd89bb7bced05e91",
+    "semantic_hash": ""
+  },
+  ".kilo/agent-manager.json": {
+    "mtime": 1781456246.7341056,
+    "ast_hash": "a4a62e9a611e2d905121693d0fe25bf8",
+    "semantic_hash": ""
+  },
+  ".kilo/package.json": {
+    "mtime": 1781456250.3708782,
+    "ast_hash": "3bf9a25b8ea5f6a3bb6ebdc1dfc3380a",
+    "semantic_hash": ""
+  },
+  "app/api/all_dependencies/__init__.py": {
+    "mtime": 1781454462.6051393,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/all_dependencies/login_required.py": {
+    "mtime": 1781939303.5371447,
+    "ast_hash": "1db9e7747be665012dbc1b96a36b08ba",
+    "semantic_hash": ""
+  },
+  "app/api/auth_cookies.py": {
+    "mtime": 1781939303.5371447,
+    "ast_hash": "5b821bf2a80c8090995742e9c10433bf",
+    "semantic_hash": ""
+  },
+  "app/api/middlewares/__init__.py": {
+    "mtime": 1781421259.9991806,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/middlewares/csrf.py": {
+    "mtime": 1781939303.5451574,
+    "ast_hash": "0da9d0adf26d03793413547713202c53",
+    "semantic_hash": ""
+  },
+  "app/api/routes/auth/__init__.py": {
+    "mtime": 1781369116.666007,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/routes/auth/auth_routes.py": {
+    "mtime": 1781939461.5992024,
+    "ast_hash": "c7d095164d93ae7ee1ea469afd1ad1fa",
+    "semantic_hash": ""
+  },
+  "app/api/routes/auth/auth_schemas.py": {
+    "mtime": 1781939441.7354922,
+    "ast_hash": "1f021bc8a6d9b90797044ee2032b0078",
+    "semantic_hash": ""
+  },
+  "app/api/routes/auth/auth_service.py": {
+    "mtime": 1781939450.389247,
+    "ast_hash": "f76f60c47451a8f95d2bc0eb483e20c6",
+    "semantic_hash": ""
+  },
+  "app/api/routes/auth/model.py": {
+    "mtime": 1781939439.5382886,
+    "ast_hash": "7c7664109291fefcd664bb8354800384",
+    "semantic_hash": ""
+  },
+  "app/api/routes/family/__init__.py": {
+    "mtime": 1781108285.445094,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/routes/family/model.py": {
+    "mtime": 1781889026.7981021,
+    "ast_hash": "feb49688f69cad2feabb094d4486b665",
+    "semantic_hash": ""
+  },
+  "app/utils/email_service.py": {
+    "mtime": 1781939461.8754725,
+    "ast_hash": "7b6e464a70c28a061d196a0965e9c081",
+    "semantic_hash": ""
+  },
+  "app/utils/security_and_auth.py": {
+    "mtime": 1781939441.0017219,
+    "ast_hash": "0fb577892e4d77284a1f2fe94715b3cd",
+    "semantic_hash": ""
+  },
+  "migrations/env.py": {
+    "mtime": 1781939303.5371447,
+    "ast_hash": "3b78b65a5418408a229922c6e0b202fe",
+    "semantic_hash": ""
+  },
+  "migrations/versions/792f82b39133_add_family_many_to_many_relationship.py": {
+    "mtime": 1781108561.6146371,
+    "ast_hash": "1edd060f0c753045a66d470ceca16c1c",
+    "semantic_hash": ""
+  },
+  "migrations/versions/976cda02e11a_initialize_user_db.py": {
+    "mtime": 1781028689.508495,
+    "ast_hash": "9e0b960dd55b4cc685721476a691411f",
+    "semantic_hash": ""
+  },
+  "migrations/versions/b617848db647_add_family_models_and_expense_logs.py": {
+    "mtime": 1781284716.449915,
+    "ast_hash": "caff36af118f5090b3b26a9e8b8cae96",
+    "semantic_hash": ""
+  },
+  "app/api/routes/family/family_routes.py": {
+    "mtime": 1781938308.8500848,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/routes/family/family_schemas.py": {
+    "mtime": 1781943250.2960668,
+    "ast_hash": "4b0e4bac7378946dcc30ce4d81bfd489",
+    "semantic_hash": ""
+  },
+  "app/api/routes/family/family_service.py": {
+    "mtime": 1781939153.2445796,
+    "ast_hash": "678cfa7d7697dc04361ceffee90641b5",
+    "semantic_hash": ""
+  },
+  "migrations/versions/d345b25b8345_added_auth_family_and_user_models.py": {
+    "mtime": 1781939554.7014823,
+    "ast_hash": "ad3a2d7d67bc9aab328970395d7c6a16",
     "semantic_hash": ""
   }
 }

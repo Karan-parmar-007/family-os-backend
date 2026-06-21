@@ -1,6 +1,7 @@
 # app/api/db_dependencies.py
 
-from typing import Annotated, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from botocore.client import BaseClient
 from fastapi import Depends, Request
@@ -26,6 +27,6 @@ async def _get_garage_client(request: Request) -> AsyncGenerator[BaseClient, Non
         yield client
 
 
-PGSessionDep = Annotated[AsyncSession, Depends(_get_pg_session)]
-MongoDBDep = Annotated[AsyncDatabase, Depends(_get_mongo_db)]
-GarageClientDep = Annotated[BaseClient, Depends(_get_garage_client)]
+type PGSessionDep = Annotated[AsyncSession, Depends(_get_pg_session)]
+type MongoDBDep = Annotated[AsyncDatabase, Depends(_get_mongo_db)]
+type GarageClientDep = Annotated[BaseClient, Depends(_get_garage_client)]

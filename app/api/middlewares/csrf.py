@@ -1,109 +1,80 @@
-# app/api/middlewares/csrf.py
 """
-CSRF protection middleware.
+CSRF protection middleware (double-submit cookie pattern).
 
-Protects all non-safe HTTP methods (POST, PUT, DELETE, PATCH) on non-auth
-routes by requiring a valid CSRF token in the ``X-CSRF-Token`` request header.
-The token is issued as a non-HttpOnly ``x-csrf-token`` cookie on every response
-so the React SPA can read it and send it in the header.
+Validates that state-changing requests carry a matching, signed CSRF token in
+both the ``x-csrf-token`` cookie and the ``X-CSRF-Token`` header.
 
-Auth routes (/auth/*) are exempt — they serve the frontend that obtains the
-token via the middleware on subsequent protected requests.
+Tokens are issued only by auth endpoints (login / refresh). This middleware
+never generates tokens — on failure it revokes the refresh token and clears
+all auth cookies so the client session is terminated.
 """
 
 import logging
-import secrets
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
+from sqlalchemy import delete, select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+from app.api.auth_cookies import CSRF_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, clear_auth_cookies
+from app.api.routes.auth.model import RefreshToken
+from app.utils.security_and_auth import verify_csrf_token
+from app.utils.security_and_auth import hash_token
 
 logger = logging.getLogger(__name__)
 
-# Routes exempt from CSRF checks.
-_EXEMPT_PREFIXES = ("/auth/",)
-# HTTP methods that don't modify state — always exempt.
+_EXEMPT_PREFIXES = ("/api/auth/",)
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def _is_exempt(path: str) -> bool:
-    """Return ``True`` if *path* should skip CSRF validation."""
-    if path.startswith(_EXEMPT_PREFIX_PREFIXES):
-        return True
-    return False
+    return any(path.startswith(prefix) for prefix in _EXEMPT_PREFIXES)
+
+
+def _csrf_valid(request: Request) -> bool:
+    header_token = request.headers.get("x-csrf-token")
+    cookie_token = request.cookies.get(CSRF_TOKEN_COOKIE)
+    if not header_token or not cookie_token or header_token != cookie_token:
+        return False
+    return verify_csrf_token(header_token)
+
+
+async def _revoke_refresh_token(request: Request) -> None:
+    refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE)
+    if not refresh_token:
+        return
+
+    hashed = hash_token(refresh_token)
+    postgres_manager = request.app.state.postgres_session
+    async for session in postgres_manager.get_session():
+        stmt = select(RefreshToken).where(RefreshToken.token == hashed)
+        result = await session.execute(stmt)
+        stored = result.scalar_one_or_none()
+        if stored is not None:
+            await session.execute(delete(RefreshToken).where(RefreshToken.user_id == stored.user_id))
+            await session.commit()
+        break
+
+
+async def _force_logout_response(request: Request) -> Response:
+    await _revoke_refresh_token(request)
+    response = JSONResponse(
+        status_code=403,
+        content={"detail": "CSRF token missing or invalid", "logged_out": True},
+    )
+    clear_auth_cookies(response)
+    return response
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-    """Issue an ``x-csrf-token`` cookie and validate it on state-changing requests."""
+    """Validate CSRF tokens on state-changing requests outside auth routes."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        from app.config import auth_settings
-
-        # --- exempt paths / safe methods --------------------------------
         if _is_exempt(request.url.path) or request.method in _SAFE_METHODS:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
-        # --- validate token ---------------------------------------------
-        secret = self._get_csrf_secret()
-        token = request.headers.get("x-csrf-token")
-
-        if not token or not self._verify(secret, token):
+        if not _csrf_valid(request):
             logger.warning("CSRF validation failed for %s %s", request.method, request.url.path)
-            return Response(
-                content='{"detail":"CSRF token missing or invalid"}',
-                status_code=403,
-                media_type="application/json",
-            )
+            return await _force_logout_response(request)
 
-        # --- proceed ----------------------------------------------------
-        response = await call_next(request)
-
-        # Issue a fresh token cookie only if the request didn't already
-        # carry one — avoids rotating the token on every protected call.
-        existing = request.cookies.get("x-csrf-token")
-        if existing:
-            # Validate the existing token; if valid, keep it.
-            if self._verify(secret, existing):
-                response.set_cookie(
-                    key="x-csrf-token",
-                    value=existing,
-                    httponly=False,
-                    samesite=auth_settings.CSRF_COOKIE_SAMESITE,
-                    secure=True,
-                    path="/",
-                )
-                return response
-            # Token expired — fall through to issue a new one.
-
-        new_token = secrets.token_urlsafe(32)
-        response.set_cookie(
-            key="x-csrf-token",
-            value=new_token,
-            httponly=False,
-            samesite=auth_settings.CSRF_COOKIE_SAMESITE,
-            secure=True,
-            path="/",
-        )
-        return response
-
-    # -- internals --------------------------------------------------------
-
-    @staticmethod
-    def _get_csrf_secret() -> str:
-        # Deferred import to avoid circular imports at module load time.
-        from app.config import auth_settings  # noqa: local import
-
-        return auth_settings._csrf_secret
-
-
-    @staticmethod
-    def _verify(secret: str, token: str) -> bool:
-        """Verify a CSRF token using HMAC-SHA256 via ``itsdangerous``."""
-        from itsdangerous import Signer
-
-        signer = Signer(secret, salt="csrf")
-        try:
-            signer.unsign(token)
-            return True
-        except Exception:
-            return False
+        return await call_next(request)

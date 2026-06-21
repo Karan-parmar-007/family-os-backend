@@ -5,6 +5,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 from app.config import auth_settings
+import secrets
+
+from itsdangerous import BadSignature, Signer
+_SIGNER_SALT = "csrf"
+ACCESS_AUDIENCE = auth_settings.AUTH_AUDIENCE_ACCESS
+REFRESH_AUDIENCE = auth_settings.AUTH_AUDIENCE_REFRESH
 
 
 def _base_payload(data: dict, audience: str) -> dict:
@@ -18,7 +24,7 @@ def _base_payload(data: dict, audience: str) -> dict:
 
 
 def create_access_token(data: dict) -> str:
-    to_encode = _base_payload(data, auth_settings.AUTH_AUDIENCE_ACCESS)
+    to_encode = _base_payload(data, ACCESS_AUDIENCE)
     expire = datetime.now(timezone.utc) + timedelta(minutes=auth_settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode["exp"] = expire
     encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
@@ -26,7 +32,7 @@ def create_access_token(data: dict) -> str:
 
 
 def create_refresh_token(data: dict) -> str:
-    to_encode = _base_payload(data, auth_settings.AUTH_AUDIENCE_REFRESH)
+    to_encode = _base_payload(data, REFRESH_AUDIENCE)
     expire = datetime.now(timezone.utc) + timedelta(days=auth_settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode["exp"] = expire
     encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
@@ -47,6 +53,20 @@ def create_email_verification_token(data: dict) -> str:
     to_encode["exp"] = expire
     encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
     return encoded_jwt
+
+
+def create_family_invite_token(data: dict) -> str:
+    """Create a JWT token for family account setup invitation."""
+    to_encode = _base_payload(data, "family-os-invite")
+    expire = datetime.now(timezone.utc) + timedelta(days=auth_settings.FAMILY_INVITE_TOKEN_EXPIRE_DAYS)
+    to_encode["exp"] = expire
+    encoded_jwt = jwt.encode(to_encode, auth_settings.SECRET_KEY, algorithm=auth_settings.ALGORITHM)
+    return encoded_jwt
+
+
+def generate_otp() -> str:
+    """Generate a 6-digit numeric OTP."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def hash_token(raw_token: str) -> str:
@@ -83,3 +103,26 @@ def decode_token(token: str, audience: Optional[str] = None) -> dict:
         raise ValueError("Token has expired")
     except InvalidTokenError:
         raise ValueError("Invalid token")
+
+def _signer() -> Signer:
+    secret = auth_settings.csrf_secret
+    return Signer(secret, salt=_SIGNER_SALT)
+
+
+def generate_csrf_token() -> str:
+    """Create a signed CSRF token for the double-submit cookie."""
+    raw = secrets.token_urlsafe(32)
+    return _signer().sign(raw).decode("utf-8")
+
+
+def verify_csrf_token(token: str) -> bool:
+    """Return True if *token* is a valid signed CSRF token."""
+    if not token:
+        return False
+    try:
+        _signer().unsign(token)
+        return True
+    except BadSignature:
+        return False
+    except Exception:
+        return False

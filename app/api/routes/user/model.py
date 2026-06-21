@@ -43,6 +43,7 @@ class UserBase(SQLModel, table=True):
     password: str
     is_active: bool = Field(default=True)
     is_premium_user: bool = Field(default=False)
+    is_email_verified: bool = Field(default=False)
     created_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True),
