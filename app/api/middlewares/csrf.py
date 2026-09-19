@@ -13,6 +13,7 @@ from app.auth.cookies import CSRF_HEADER_NAME, CSRF_TOKEN_COOKIE
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 _EXEMPT_PREFIXES = (
+    "/health",
     "/api/familyos/health",
     "/api/familyos/auth/refresh",
     "/api/auth/refresh",

@@ -16,6 +16,7 @@ from app.db.mongo_session import MongoSession
 from app.db.postgress_session import PostgresSession
 from app.scheduler.fos_tick import run_fos_tick
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -38,14 +39,17 @@ async def lifespan(app: FastAPI):
     postgres_session = PostgresSession()
     garage_session = GarageSession()
 
-    await mongo_session.connect()
-    await postgres_session.verify_connection()
-
     app.state.mongo_session = mongo_session
     app.state.postgres_session = postgres_session
     app.state.garage_session = garage_session
 
-    await _scheduler_tick()
+    try:
+        await mongo_session.connect()
+        await postgres_session.verify_connection()
+        logger.info("PostgreSQL connected successfully")
+        await _scheduler_tick()
+    except Exception as exc:
+        logger.exception("Startup verify or scheduler failed: %s", exc)
 
     scheduler: AsyncIOScheduler | None = None
     if scheduler_settings.SCHEDULER_ENABLED:
@@ -88,3 +92,8 @@ app.add_middleware(
 app.include_router(main_router)
 # Local-dev cookie path: refresh_token is scoped to /api/auth
 app.include_router(auth_routes.router, prefix="/api")
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
