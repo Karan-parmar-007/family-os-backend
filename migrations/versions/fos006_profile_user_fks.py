@@ -20,6 +20,9 @@ def upgrade() -> None:
         DO $$
         DECLARE r RECORD;
         BEGIN
+          IF to_regclass('public.users') IS NULL THEN
+            RETURN;
+          END IF;
           FOR r IN
             SELECT conrelid::regclass AS tbl, conname
             FROM pg_constraint

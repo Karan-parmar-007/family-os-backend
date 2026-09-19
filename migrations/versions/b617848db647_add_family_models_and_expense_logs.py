@@ -412,7 +412,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('expense_log_id', 'user_id')
     )
-    op.add_column('families', sa.Column('currency', sa.String(), nullable=False))
+    op.add_column('families', sa.Column('currency', sa.String(), nullable=False, server_default='USD'))
     op.add_column('families', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('families', sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))
     op.add_column('user_family_links', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False))

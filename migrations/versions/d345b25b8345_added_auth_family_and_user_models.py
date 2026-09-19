@@ -624,7 +624,7 @@ def upgrade() -> None:
     op.drop_column('personal_debts', 'next_intreast_increase_date')
     op.drop_column('personal_debts', 'intrest_increase_every')
     op.add_column('personal_expenses', sa.Column('deducted_from', sa.String(), nullable=True))
-    op.add_column('users', sa.Column('is_email_verified', sa.Boolean(), nullable=False))
+    op.add_column('users', sa.Column('is_email_verified', sa.Boolean(), nullable=False, server_default=sa.text('false')))
     # ### end Alembic commands ###
 
 

@@ -14,6 +14,11 @@ import app.api.routes.document.model  # noqa: F401
 import app.api.routes.expense.model  # noqa: F401
 import app.api.routes.family_expense.model  # noqa: F401
 import app.api.routes.family.model  # noqa: F401
+import app.api.routes.category.category_model  # noqa: F401
+import app.api.routes.profile.model  # noqa: F401
+import app.api.routes.money.model  # noqa: F401
+import app.api.routes.vault.model  # noqa: F401
+import app.api.routes.debt.simple_debt_models  # noqa: F401
 import app.api.routes.family_income.model  # noqa: F401
 import app.api.routes.goals.model  # noqa: F401
 import app.api.routes.insurance.model  # noqa: F401
