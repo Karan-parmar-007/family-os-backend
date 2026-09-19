@@ -1,4 +1,6 @@
 # app/config.py
+import base64
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _base_config = SettingsConfigDict(
@@ -37,7 +39,17 @@ class DatabaseSettings(BaseSettings):
 
 
 class AuthSettings(BaseSettings):
-    SECRET_KEY: str
+    SECRET_KEY: str = ""
+    # SSO auth
+    SSO_JWT_SECRET: str = ""
+    SSO_JWT_ALGORITHM: str = "HS256"
+    SSO_BASE_URL: str = "http://localhost:8000/api"
+    SSO_FRONTEND_URL: str = "http://localhost:5173"
+    ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
+    CSRF_COOKIE_NAME: str = "csrf_token"
+    CSRF_HEADER_NAME: str = "X-CSRF-Token"
+    ENVIRONMENT: str = "development"
+
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -70,11 +82,72 @@ class EmailSettings(BaseSettings):
     SMTP_PASSWORD: str
     SMTP_FROM_EMAIL: str
     SMTP_FROM_NAME: str = "Faminly OS"
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "http://localhost:1577"
 
     model_config = _base_config
+
+
+class CorsSettings(BaseSettings):
+    CORS_ALLOWED_ORIGINS: str = (
+        "http://localhost:5173,http://localhost:1577,"
+        "https://familyos.karanparmar.in,https://auth.karanparmar.in"
+    )
+
+    model_config = _base_config
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        if not self.CORS_ALLOWED_ORIGINS:
+            return []
+        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+
+
+class FeatureSettings(BaseSettings):
+    FEATURE_SUBFAMILIES: bool = True
+    FEATURE_SHARING: bool = True
+    FEATURE_TRANSFERS: bool = True
+    FEATURE_SCHEDULER: bool = False
+    FEATURE_NOTIFICATIONS: bool = True
+    FEATURE_ENCRYPTION: bool = False
+    OWNERSHIP_STRICT: bool = True
+
+    model_config = _base_config
+
+
+class SchedulerSettings(BaseSettings):
+    SCHEDULER_ENABLED: bool = True
+    SCHEDULER_TICK_MINUTES: int = 1
+    JOB_MAX_RETRIES: int = 3
+    JOB_DEFAULT_DELAY_DAYS: int = 3
+    JOB_ADVISORY_LOCK_KEY: int = 8675309
+
+    model_config = _base_config
+
+
+class CryptoSettings(BaseSettings):
+    ENCRYPTION_KEYS: str = ""
+    ENCRYPTION_ACTIVE_KEY_ID: str = "v1"
+    ENCRYPT_DOCUMENTS: bool = True
+
+    model_config = _base_config
+
+    def encryption_key_bytes(self, key_id: str | None = None) -> bytes:
+        kid = key_id or self.ENCRYPTION_ACTIVE_KEY_ID
+        if not self.ENCRYPTION_KEYS:
+            raise ValueError("ENCRYPTION_KEYS not configured")
+        for part in self.ENCRYPTION_KEYS.split(","):
+            if ":" not in part:
+                continue
+            k, v = part.split(":", 1)
+            if k == kid:
+                return base64.b64decode(v)
+        raise ValueError(f"Unknown encryption key id: {kid}")
 
 
 auth_settings = AuthSettings() # type: ignore
 db_settings = DatabaseSettings() # type: ignore
 email_settings = EmailSettings() # type: ignore
+cors_settings = CorsSettings() # type: ignore
+feature_settings = FeatureSettings() # type: ignore
+scheduler_settings = SchedulerSettings() # type: ignore
+crypto_settings = CryptoSettings() # type: ignore

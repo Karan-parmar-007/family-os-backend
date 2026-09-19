@@ -1,14 +1,20 @@
+import secrets
 from datetime import datetime
 from typing import ClassVar, List, TYPE_CHECKING
 from uuid import UUID
 
 import uuid6
 from pydantic import EmailStr
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, String
 from sqlmodel import Field, Relationship, SQLModel, func
 
 if TYPE_CHECKING:
     from app.api.routes.family.model import Family
+
+
+def generate_friend_code() -> str:
+    """Generate an 8-digit numeric friend code (keeps leading zeros)."""
+    return f"{secrets.randbelow(100000000):08d}"
 
 
 class UserFamilyLink(SQLModel, table=True):
@@ -44,6 +50,13 @@ class UserBase(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_premium_user: bool = Field(default=False)
     is_email_verified: bool = Field(default=False)
+    is_super_admin: bool = Field(default=False)  # Plan 10
+    preferred_currency: str = Field(default="INR")  # Plan 10
+    personal_currency: str = Field(default="INR")  # Plan 10
+    friend_code: str = Field(
+        default_factory=generate_friend_code,
+        sa_column=Column(String(length=8), unique=True, index=True, nullable=False),
+    )
     created_at: datetime = Field(
         sa_column=Column(
             DateTime(timezone=True),
@@ -64,4 +77,5 @@ class UserBase(SQLModel, table=True):
         back_populates="users",
         link_model=UserFamilyLink,
     )
+
 

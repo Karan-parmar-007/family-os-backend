@@ -1,22 +1,30 @@
+from app.auth.fos_profile import FosProfileDep as CurrentUserDep
 # app/api/dependencies.py
 
 from typing import Annotated
-from uuid import UUID
+from fastapi import Depends
 
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
 
-from app.api.auth_cookies import ACCESS_TOKEN_COOKIE
 from app.api.db_dependencies import GarageClientDep, MongoDBDep, PGSessionDep
-from app.api.routes.auth.auth_service import AuthService
-from app.api.routes.health.health_service import HealthService
-from app.api.routes.user.model import UserBase
-from app.api.routes.user.user_service import UserService
-from app.utils.security_and_auth import ACCESS_AUDIENCE, decode_token
+from app.api.routes.assets.assets_service import AssetsService
+from app.api.routes.debt.debt_service import DebtService
+from app.api.routes.document.document_service import DocumentService
+from app.api.routes.expense.expense_service import ExpenseService
 from app.api.routes.family.family_service import FamilyService
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+from app.api.routes.family_relationship.family_relationship_service import (
+    FamilyRelationshipService,
+)
+from app.api.routes.family_expense.expense_service import RecurringExpenseService
+from app.api.routes.family_income.income_service import IncomeService
+from app.api.routes.health.health_service import HealthService
+from app.api.routes.insurance.insurance_service import InsuranceService
+from app.api.routes.savings.savings_service import SavingsService
+from app.api.routes.notification.notification_service import NotificationService
+from app.api.routes.scheduler.scheduler_service import SchedulerService
+from app.api.routes.transfer.transfer_service import TransferService
+from app.api.routes.friend.friend_service import FriendService
+from app.api.routes.upcoming.upcoming_service import UpcomingService
+from app.api.routes.user.user_service import UserService
 
 
 async def get_health_service(
@@ -31,11 +39,6 @@ async def get_health_service(
     )
 
 
-async def get_auth_service(
-    session: PGSessionDep,
-    mongo: MongoDBDep,
-) -> AuthService:
-    return AuthService(pg_session=session, mongo_db=mongo)
 
 
 async def get_user_service(
@@ -56,38 +59,94 @@ async def get_family_service(
     )
 
 
-async def get_current_user(
-    request: Request,
+async def get_family_relationship_service(
     session: PGSessionDep,
-    bearer_token: Annotated[str | None, Depends(oauth2_scheme)] = None,
-) -> UserBase:
-    """Validate access token from HttpOnly cookie or Authorization header."""
-    raw_token = request.cookies.get(ACCESS_TOKEN_COOKIE) or bearer_token
-    if not raw_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+) -> FamilyRelationshipService:
+    return FamilyRelationshipService(pg_session=session)
 
-    try:
-        payload = decode_token(raw_token, audience=ACCESS_AUDIENCE)
-        user_id_str = payload.get("sub")
-        if not isinstance(user_id_str, str):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
-    stmt = select(UserBase).where(UserBase.id == UUID(user_id_str))
-    result = await session.execute(stmt)
-    user = result.scalar_one_or_none()
+async def get_income_service(
+    session: PGSessionDep,
+    garage_client: GarageClientDep,
+) -> IncomeService:
+    return IncomeService(pg_session=session, garage_client=garage_client)
 
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    return user
+async def get_document_service(
+    session: PGSessionDep,
+    garage_client: GarageClientDep,
+) -> DocumentService:
+    return DocumentService(pg_session=session, garage_client=garage_client)
+
+
+async def get_debt_service(session: PGSessionDep) -> DebtService:
+    return DebtService(pg_session=session)
+
+
+async def get_savings_service(session: PGSessionDep) -> SavingsService:
+    return SavingsService(pg_session=session)
+
+
+async def get_assets_service(session: PGSessionDep) -> AssetsService:
+    return AssetsService(pg_session=session)
+
+
+async def get_recurring_expense_service(
+    session: PGSessionDep,
+    garage_client: GarageClientDep,
+) -> RecurringExpenseService:
+    return RecurringExpenseService(pg_session=session, garage_client=garage_client)
+
+
+async def get_expense_service(session: PGSessionDep) -> ExpenseService:
+    return ExpenseService(pg_session=session)
+
+
+async def get_insurance_service(session: PGSessionDep) -> InsuranceService:
+    return InsuranceService(pg_session=session)
+
+
+
+
+
+async def get_transfer_service(session: PGSessionDep) -> TransferService:
+    return TransferService(pg_session=session)
+
+
+async def get_friend_service(session: PGSessionDep) -> FriendService:
+    return FriendService(pg_session=session)
+
+
+async def get_notification_service(session: PGSessionDep) -> NotificationService:
+    return NotificationService(pg_session=session)
+
+
+async def get_scheduler_service(session: PGSessionDep) -> SchedulerService:
+    return SchedulerService(pg_session=session)
+
+
+async def get_upcoming_service(session: PGSessionDep) -> UpcomingService:
+    return UpcomingService(pg_session=session)
 
 
 type HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
-type AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 type UserServiceDep = Annotated[UserService, Depends(get_user_service)]
-type CurrentUserDep = Annotated[UserBase, Depends(get_current_user)]
 type FamilyServiceDep = Annotated[FamilyService, Depends(get_family_service)]
+type FamilyRelationshipServiceDep = Annotated[
+    FamilyRelationshipService, Depends(get_family_relationship_service)
+]
+type IncomeServiceDep = Annotated[IncomeService, Depends(get_income_service)]
+type DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+type DebtServiceDep = Annotated[DebtService, Depends(get_debt_service)]
+type SavingsServiceDep = Annotated[SavingsService, Depends(get_savings_service)]
+type AssetsServiceDep = Annotated[AssetsService, Depends(get_assets_service)]
+type RecurringExpenseServiceDep = Annotated[
+    RecurringExpenseService, Depends(get_recurring_expense_service)
+]
+type ExpenseServiceDep = Annotated[ExpenseService, Depends(get_expense_service)]
+type InsuranceServiceDep = Annotated[InsuranceService, Depends(get_insurance_service)]
+type TransferServiceDep = Annotated[TransferService, Depends(get_transfer_service)]
+type FriendServiceDep = Annotated[FriendService, Depends(get_friend_service)]
+type NotificationServiceDep = Annotated[NotificationService, Depends(get_notification_service)]
+type SchedulerServiceDep = Annotated[SchedulerService, Depends(get_scheduler_service)]
+type UpcomingServiceDep = Annotated[UpcomingService, Depends(get_upcoming_service)]

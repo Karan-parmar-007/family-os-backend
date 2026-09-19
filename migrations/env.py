@@ -8,15 +8,25 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from sqlmodel import SQLModel
 
-import app.api.routes.family.model  # noqa: F401 — register all family model metadata
-from app.api.routes.auth.model import (  # noqa: F401
-    EmailChangeToken,
-    EmailVerificationToken,
-    FamilyAccountSetupToken,
-    ForgetPasswordToken,
-    RefreshToken,
-    ResetPasswordToken,
-)
+import app.api.routes.assets.model  # noqa: F401
+import app.api.routes.debt.model  # noqa: F401
+import app.api.routes.document.model  # noqa: F401
+import app.api.routes.expense.model  # noqa: F401
+import app.api.routes.family_expense.model  # noqa: F401
+import app.api.routes.family.model  # noqa: F401
+import app.api.routes.family_income.model  # noqa: F401
+import app.api.routes.goals.model  # noqa: F401
+import app.api.routes.insurance.model  # noqa: F401
+import app.api.routes.savings.model  # noqa: F401
+import app.api.routes.savings_plans.model  # noqa: F401
+import app.api.routes.scheduler.model  # noqa: F401
+import app.api.routes.transfer.model  # noqa: F401
+import app.api.routes.friend.model  # noqa: F401
+import app.api.routes.investments.model  # noqa: F401  (Plan 04)
+import app.api.routes.currency.model  # noqa: F401  (Plan 10)
+import app.core.funding_service  # noqa: F401  (Plan 01: payment_split_plans, payment_split_lines, funding_breakdown_entries)
+import app.core.default_bucket_service  # noqa: F401  (Plan 01: default_bucket_entries)
+# Old local auth tokens removed
 from app.api.routes.user.model import UserBase, UserFamilyLink  # noqa: F401
 from app.config import db_settings
 

@@ -1,203 +1,159 @@
+# app/api/routes/auth/auth_routes.py
+from __future__ import annotations
+
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import JSONResponse
 
-from app.api.auth_cookies import clear_auth_cookies, set_auth_cookies
-from app.api.dependencies import AuthServiceDep, CurrentUserDep
-from app.api.routes.auth.auth_schemas import (
-    AccountSetupRequest,
-    ForgetPasswordRequest,
-    InviteMemberRequest,
-    LoginRequest,
-    MessageResponse,
-    ResetPasswordRequest,
-    SignupRequest,
-    VerifyEmailRequest,
+from app.auth.cookies import CSRF_HEADER_NAME, CSRF_TOKEN_COOKIE
+from app.auth.dependencies import SessionIdentityDep
+from app.auth.sso_client import cookie_header_from_request, proxy_sso
+from app.api.routes.auth.sso_auth_schemas import (
+    ProfileSummary,
+    SessionResponse,
+    TokenProxyResponse,
 )
-from app.api.routes.user.model import UserFamilyLink
+from app.api.db_dependencies import PGSessionDep
+from app.api.routes.profile.profile_service import ProfileService
+from app.config import auth_settings
+from app.core.errors import UnauthorizedError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post(
-    "/signup",
-    response_model=MessageResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Sign up a new user",
-)
-async def signup(
-    req: SignupRequest,
-    response: Response,
-    service: AuthServiceDep,
-) -> MessageResponse:
+def _forward_set_cookies(upstream: object, response: Response) -> None:
+    """Copy Set-Cookie headers from an httpx response onto the FastAPI response."""
+    headers = getattr(upstream, "headers", None)
+    if headers is None:
+        return
+    get_list = getattr(headers, "get_list", None)
+    if callable(get_list):
+        values = get_list("set-cookie")
+    else:
+        raw = headers.get("set-cookie")
+        values = [raw] if raw else []
+    for value in values:
+        if value:
+            response.headers.append("set-cookie", value)
+
+
+@router.get("/session", response_model=SessionResponse, summary="Get current session identity from SSO")
+async def get_session(
+    identity: SessionIdentityDep,
+    session: PGSessionDep,
+) -> SessionResponse:
+    """Always 200 — anonymous loads must not trip auth refresh loops."""
+    if identity is None:
+        return SessionResponse(
+            authenticated=False,
+            is_owner=False,
+            is_admin=False,
+            email=None,
+            user_id=None,
+            role_name=None,
+            name=None,
+            profile=None,
+        )
+    role = (identity.role_name or "").strip().lower()
+    is_admin = role in {"owner", "super_admin"}
+
+    # Load FosProfile if SSO is authenticated
+    profile_summary: ProfileSummary | None = None
     try:
-        access_token, refresh_token, csrf_token = await service.signup(req.email, req.password, req.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        svc = ProfileService(session)
+        fos_profile = await svc.get_by_sso_id(identity.user_id)
+        if fos_profile is not None:
+            profile_summary = ProfileSummary(
+                id=fos_profile.id,
+                display_name=fos_profile.display_name,
+                personal_currency=fos_profile.personal_currency,
+                timezone=fos_profile.timezone,
+                personal_code=fos_profile.personal_code,
+                max_family_memberships=fos_profile.max_family_memberships,
+            )
+    except Exception:
+        logger.exception("Failed to load FosProfile for session")
 
-    set_auth_cookies(response, access_token, refresh_token, csrf_token=csrf_token)
-    return MessageResponse(message="Signup successful")
-
-
-@router.post(
-    "/login",
-    response_model=MessageResponse,
-    summary="Login with email and password",
-)
-async def login(
-    req: LoginRequest,
-    response: Response,
-    service: AuthServiceDep,
-) -> MessageResponse:
-    try:
-        access_token, refresh_token, csrf_token = await service.login(req.email, req.password)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
-
-    set_auth_cookies(response, access_token, refresh_token, csrf_token=csrf_token)
-    return MessageResponse(message="Login successful")
-
-
-@router.post(
-    "/refresh",
-    response_model=MessageResponse,
-    summary="Refresh access token",
-)
-async def refresh(
-    request: Request,
-    response: Response,
-    service: AuthServiceDep,
-) -> MessageResponse:
-    refresh_token = request.cookies.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing")
-
-    try:
-        access_token, new_refresh_token, csrf_token = await service.refresh_token(refresh_token)
-    except ValueError as exc:
-        clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
-
-    set_auth_cookies(response, access_token, new_refresh_token, csrf_token=csrf_token)
-    return MessageResponse(message="Token refreshed")
-
-
-@router.post(
-    "/logout",
-    response_model=MessageResponse,
-    summary="Logout (revoke refresh token and clear cookies)",
-)
-async def logout(
-    request: Request,
-    response: Response,
-    service: AuthServiceDep,
-) -> MessageResponse:
-    refresh_token = request.cookies.get("refresh_token")
-    if refresh_token:
-        await service.logout(refresh_token)
-
-    clear_auth_cookies(response)
-    return MessageResponse(message="Logged out")
-
-
-@router.post(
-    "/forget-password",
-    response_model=MessageResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Send password reset email",
-)
-async def forget_password(req: ForgetPasswordRequest, service: AuthServiceDep) -> MessageResponse:
-    await service.forget_password(req.email)
-    return MessageResponse(message="If the email exists, a reset link has been sent")
-
-
-@router.post(
-    "/reset-password",
-    response_model=MessageResponse,
-    summary="Reset password using token",
-)
-async def reset_password(req: ResetPasswordRequest, service: AuthServiceDep) -> MessageResponse:
-    try:
-        await service.reset_password(req.token, req.new_password)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return MessageResponse(message="Password reset successful")
-
-
-@router.post(
-    "/verify-email",
-    response_model=MessageResponse,
-    summary="Verify email using token",
-)
-async def verify_email(req: VerifyEmailRequest, service: AuthServiceDep) -> MessageResponse:
-    try:
-        await service.verify_email(req.token)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return MessageResponse(message="Email verified successfully")
-
-
-@router.post(
-    "/invite-member",
-    response_model=MessageResponse,
-    summary="Invite a user to a family (manager only)",
-)
-async def invite_member(
-    req: InviteMemberRequest,
-    current_user: CurrentUserDep,
-    service: AuthServiceDep,
-) -> MessageResponse:
-    # Verify the current user is a manager of the requested family
-    stmt = select(UserFamilyLink).where(
-        UserFamilyLink.user_id == current_user.id,
-        UserFamilyLink.family_id == req.family_id,
-        UserFamilyLink.is_family_manager.is_(True),
+    return SessionResponse(
+        authenticated=True,
+        is_owner=identity.is_owner,
+        is_admin=is_admin,
+        email=identity.email,
+        user_id=identity.user_id,
+        role_name=identity.role_name,
+        name=identity.name,
+        profile=profile_summary,
     )
-    result = await service.pg_session.execute(stmt)
-    if result.scalar_one_or_none() is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only family managers can invite members",
-        )
+
+
+@router.post("/refresh", response_model=TokenProxyResponse, summary="Proxy SSO refresh")
+async def refresh_session(request: Request) -> Response:
+    """Proxy SSO refresh. Browser hits this path so Path=/api/auth cookies apply."""
+    cookie_header = request.headers.get("cookie") or cookie_header_from_request(
+        dict(request.cookies)
+    )
+    csrf = request.headers.get(CSRF_HEADER_NAME) or request.cookies.get(CSRF_TOKEN_COOKIE)
+    try:
+        upstream = await proxy_sso("POST", "/auth/refresh", cookie_header=cookie_header, csrf_token=csrf)
+    except UnauthorizedError as exc:
+        return JSONResponse(status_code=401, content={"detail": exc.message})
 
     try:
-        await service.invite_member(
-            inviter_id=current_user.id,
-            family_id=req.family_id,
-            email=req.email,
+        body = upstream.json()
+    except ValueError:
+        body = {"message": upstream.text or "Token refresh failed"}
+
+    if upstream.status_code >= 400:
+        response = JSONResponse(
+            status_code=upstream.status_code,
+            content={"detail": body.get("detail") or body.get("message") or "Refresh failed"},
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        _forward_set_cookies(upstream, response)
+        return response
 
-    return MessageResponse(message="Invitation sent successfully")
+    response = JSONResponse(
+        status_code=200,
+        content={
+            "access_token_expires_in": body.get("access_token_expires_in"),
+            "message": body.get("message") or "Token refreshed successfully",
+        },
+    )
+    _forward_set_cookies(upstream, response)
+    return response
 
 
-@router.post(
-    "/complete-account-setup",
-    response_model=MessageResponse,
-    summary="Complete account setup via invite link",
-)
-async def complete_account_setup(
-    req: AccountSetupRequest,
-    service: AuthServiceDep,
-) -> MessageResponse:
-    """
-    Finalises a new user's account created via family invite.
-    Returns 200; frontend must redirect the user to the login page.
-    """
+@router.post("/logout", response_model=TokenProxyResponse, summary="Proxy SSO logout")
+async def logout_session(request: Request) -> Response:
+    """Proxy SSO logout and forward Set-Cookie clears."""
+    cookie_header = request.headers.get("cookie") or cookie_header_from_request(
+        dict(request.cookies)
+    )
+    csrf = request.headers.get(CSRF_HEADER_NAME) or request.cookies.get(CSRF_TOKEN_COOKIE)
     try:
-        await service.complete_account_setup(
-            email=req.email,
-            token=req.token,
-            name=req.name,
-            password=req.password,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        upstream = await proxy_sso("POST", "/auth/logout", cookie_header=cookie_header, csrf_token=csrf)
+    except UnauthorizedError as exc:
+        return JSONResponse(status_code=401, content={"detail": exc.message})
 
-    return MessageResponse(message="Account setup successful. Please log in.")
+    try:
+        body = upstream.json()
+    except ValueError:
+        body = {"message": upstream.text or "Logged out"}
 
-
+    status_code = 200 if upstream.status_code < 500 else upstream.status_code
+    response = JSONResponse(
+        status_code=status_code,
+        content={
+            "message": body.get("message") or body.get("detail") or "Logged out successfully",
+            "access_token_expires_in": None,
+        },
+    )
+    _forward_set_cookies(upstream, response)
+    if not any(k.lower() == "set-cookie" for k in response.headers.keys()):
+        is_prod = auth_settings.ENVIRONMENT == "production"
+        response.delete_cookie(key=auth_settings.ACCESS_TOKEN_COOKIE_NAME, path="/", secure=is_prod, httponly=True, samesite="lax")
+        response.delete_cookie(key=auth_settings.CSRF_COOKIE_NAME, path="/", secure=is_prod, httponly=False, samesite="lax")
+        response.delete_cookie(key="refresh_token", path="/api/auth", secure=is_prod, httponly=True, samesite="lax")
+    return response

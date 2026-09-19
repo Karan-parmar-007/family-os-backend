@@ -6,6 +6,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 class UserMeUpdate(BaseModel):
     name: str | None = None
+    preferred_currency: str | None = None
+    personal_currency: str | None = None
 
 
 class RequestEmailChange(BaseModel):
@@ -23,8 +25,11 @@ class UserMeResponse(BaseModel):
     email: EmailStr
     name: str
     is_active: bool
-    is_premium_user: bool
     is_email_verified: bool
+    is_super_admin: bool = False
+    preferred_currency: str = "INR"
+    personal_currency: str = "INR"
+    friend_code: str = ""
     created_at: datetime
 
     model_config = {"from_attributes": True}
