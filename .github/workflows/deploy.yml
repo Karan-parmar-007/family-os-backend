@@ -95,7 +95,7 @@ jobs:
           script: |
             set -euo pipefail
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            cd /srv/docker/apps/family_os
+            cd /srv/docker/apps/familyos
             export FAMILYOS_BACKEND_IMAGE="$IMAGE"
             export FAMILYOS_BACKEND_TAG="$IMAGE_TAG"
 
