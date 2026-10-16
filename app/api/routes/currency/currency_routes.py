@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.auth.dependencies import AuthenticatedDep as CurrentUserDep
+from app.auth.dependencies import AdminDep, AuthenticatedDep as CurrentUserDep
 from app.api.db_dependencies import PGSessionDep as SessionDep
 from app.api.routes.currency.model import CurrencyRate
 from app.api.routes.currency.currency_schemas import (
@@ -63,12 +63,10 @@ async def list_currency_rates(
 
 @router.post("", response_model=CurrencyRateResponse)
 async def create_currency_rate(
-    user: CurrentUserDep,
+    admin: AdminDep,
     session: SessionDep,
     req: CurrencyRateCreate,
 ):
-    if not user.is_super_admin:
-        raise HTTPException(status_code=403, detail="Only super admins can create currency rates")
 
     rate = CurrencyRate(
         base_currency=req.baseCurrency,
@@ -95,19 +93,18 @@ async def create_currency_rate(
 
 @router.post("/{rate_id}/finalize", response_model=CurrencyRateResponse)
 async def finalize_currency_rate(
-    user: CurrentUserDep,
+    admin: AdminDep,
     session: SessionDep,
     rate_id: UUID,
 ):
-    if not user.is_super_admin:
-        raise HTTPException(status_code=403, detail="Only super admins can finalize currency rates")
 
     rate = await session.get(CurrencyRate, rate_id)
     if not rate:
         raise HTTPException(status_code=404, detail="Rate not found")
         
     rate.status = "FINAL"
-    rate.finalized_by = user.id
+    # finalized_by references the legacy users table; SSO ids (ObjectId strings)
+    # can't be stored there, so it stays unset.
     rate.finalized_at = datetime.now(timezone.utc)
     
     await session.commit()

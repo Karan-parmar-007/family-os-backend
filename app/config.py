@@ -1,6 +1,8 @@
 # app/config.py
 import base64
+from urllib.parse import urlparse
 
+from karan_sso import SsoSettings
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _base_config = SettingsConfigDict(
@@ -39,40 +41,56 @@ class DatabaseSettings(BaseSettings):
 
 
 class AuthSettings(BaseSettings):
-    SECRET_KEY: str = ""
-    # SSO auth
-    SSO_JWT_SECRET: str = ""
-    SSO_JWT_ALGORITHM: str = "HS256"
+    ENVIRONMENT: str = "development"
+
+    # SSO (shared karan_sso SDK; see karan_sso/ and the SSO contract)
+    # Internal URL of the SSO API, e.g. http://sso-backend:8000/api
     SSO_BASE_URL: str = "http://localhost:8000/api"
-    SSO_FRONTEND_URL: str = "http://localhost:5173"
+    # Public issuer (JWT `iss`), e.g. https://auth.karanparmar.in/api/auth. Empty = don't check.
+    SSO_ISSUER: str = ""
+    SSO_AUDIENCE: str = "karanparmar-apps"
+    # Turn on once SSO sets JWT_AUDIENCE.
+    SSO_REQUIRE_AUDIENCE: bool = False
+    # This app's id in SSO (app-scoped roles, e.g. {"familyos": ["admin"]}).
+    SSO_APP_ID: str = "familyos"
+    # Legacy HS256 shared secret — accepted only during the RS256 rollout, then remove.
+    SSO_JWT_SECRET: str = ""
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
     CSRF_COOKIE_NAME: str = "csrf_token"
     CSRF_HEADER_NAME: str = "X-CSRF-Token"
-    ENVIRONMENT: str = "development"
 
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    RESET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
-    FORGET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 15
-    EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 15
+    # Vault secret encryption / unlock-token signing. Never used for SSO tokens.
+    # Set VAULT_SECRET_KEY to the current SSO_JWT_SECRET value before removing
+    # SSO_JWT_SECRET, otherwise existing vault secrets can't be decrypted.
+    VAULT_SECRET_KEY: str = ""
+    SECRET_KEY: str = ""
+
     EMAIL_CHANGE_OTP_EXPIRE_MINUTES: int = 10
-    CSRF_SECRET_KEY: str = ""
     FAMILY_INVITE_TOKEN_EXPIRE_DAYS: int = 2
-    
-    # New Auth & CSRF Settings
-    APP_NAME: str = "family-os"
-    AUTH_AUDIENCE_ACCESS: str = "family-os-access"
-    AUTH_AUDIENCE_REFRESH: str = "family_os_refresh"
-    AUTH_ISSUER: str = "family-os-api"
-    CSRF_COOKIE_SAMESITE: str = "lax"
 
     model_config = _base_config
 
     @property
-    def csrf_secret(self) -> str:
-        """CSRF signing secret — falls back to SECRET_KEY when unset."""
-        return self.CSRF_SECRET_KEY or self.SECRET_KEY
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() == "production"
+
+    @property
+    def vault_secret(self) -> str:
+        return self.VAULT_SECRET_KEY or self.SSO_JWT_SECRET or self.SECRET_KEY
+
+    def sso_settings(self) -> SsoSettings:
+        """SDK settings; anything not set here is still read from env by the SDK."""
+        return SsoSettings(
+            SSO_BASE_URL=self.SSO_BASE_URL,
+            SSO_ISSUER=self.SSO_ISSUER,
+            SSO_AUDIENCE=self.SSO_AUDIENCE,
+            SSO_REQUIRE_AUDIENCE=self.SSO_REQUIRE_AUDIENCE,
+            SSO_JWT_SECRET=self.SSO_JWT_SECRET,
+            SSO_APP_ID=self.SSO_APP_ID,
+            ACCESS_TOKEN_COOKIE_NAME=self.ACCESS_TOKEN_COOKIE_NAME,
+            CSRF_COOKIE_NAME=self.CSRF_COOKIE_NAME,
+            CSRF_HEADER_NAME=self.CSRF_HEADER_NAME,
+        )
 
 
 class EmailSettings(BaseSettings):
@@ -90,16 +108,25 @@ class EmailSettings(BaseSettings):
 class CorsSettings(BaseSettings):
     CORS_ALLOWED_ORIGINS: str = (
         "http://localhost:5173,http://localhost:1577,"
-        "https://familyos.karanparmar.in,https://auth.karanparmar.in"
+        "https://familyos.karanparmar.in"
     )
+    ENVIRONMENT: str = "development"
 
     model_config = _base_config
 
     @property
     def allowed_origins(self) -> list[str]:
-        if not self.CORS_ALLOWED_ORIGINS:
-            return []
-        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+        """Explicit origins only; localhost/127.0.0.1 are dropped in production."""
+        origins = [o.strip().rstrip("/") for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o for o in origins if o != "*"]
+        if self.ENVIRONMENT.strip().lower() == "production":
+            origins = [o for o in origins if not _is_local_origin(o)]
+        return origins
+
+
+def _is_local_origin(origin: str) -> bool:
+    host = urlparse(origin).hostname or ""
+    return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"} or host.endswith(".localhost")
 
 
 class FeatureSettings(BaseSettings):
