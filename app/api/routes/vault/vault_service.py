@@ -39,14 +39,14 @@ def verify_pin(pin: str, pin_hash: str) -> bool:
 
 def _encrypt_secret(plaintext: str) -> str:
     """Reversible cipher for vault secrets using app secret."""
-    key = (auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY).encode()[:32].ljust(32, b"#")
+    key = auth_settings.vault_secret.encode()[:32].ljust(32, b"#")
     plain_bytes = plaintext.encode()
     cipher_bytes = bytes([b ^ key[i % len(key)] for i, b in enumerate(plain_bytes)])
     return base64.b64encode(cipher_bytes).decode()
 
 
 def _decrypt_secret(ciphertext: str) -> str:
-    key = (auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY).encode()[:32].ljust(32, b"#")
+    key = auth_settings.vault_secret.encode()[:32].ljust(32, b"#")
     cipher_bytes = base64.b64decode(ciphertext.encode())
     plain_bytes = bytes([b ^ key[i % len(key)] for i, b in enumerate(cipher_bytes)])
     return plain_bytes.decode()
@@ -114,7 +114,7 @@ class VaultService:
             "exp": datetime.now(timezone.utc) + timedelta(minutes=20),
             "type": "vault_unlock",
         }
-        secret = auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY
+        secret = auth_settings.vault_secret
         token = jwt.encode(payload, secret, algorithm="HS256")
         return token
 
@@ -122,7 +122,7 @@ class VaultService:
         if not token:
             return False
         try:
-            secret = auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY
+            secret = auth_settings.vault_secret
             payload = jwt.decode(token, secret, algorithms=["HS256"])
             if payload.get("type") != "vault_unlock":
                 return False

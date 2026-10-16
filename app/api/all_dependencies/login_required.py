@@ -1,7 +1,7 @@
 """
 Re-exports the SSO-authenticated identity dep.
 Domain routes that need a Family OS user id must use LoggedInUserDep (fos_profiles).
-Setup and session routes keep AuthenticatedDep (SSO identity only).
+Setup and session routes keep AuthenticatedDep (SSO identity only, via karan_sso).
 """
 from app.auth.dependencies import AuthenticatedDep
 from app.auth.fos_profile import FosProfileDep

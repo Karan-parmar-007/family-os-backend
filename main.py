@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from karan_sso.fastapi import CSRFMiddleware
 
 from app.api.main_router import main_router
-from app.api.middlewares.csrf import CSRFMiddleware
-from app.api.routes.auth import auth_routes
+from app.auth.sso import configure_sso, sso_settings
 from app.core.errors import register_exception_handlers
-from app.config import cors_settings, scheduler_settings
+from app.config import auth_settings, cors_settings, scheduler_settings
 from app.db.garage_session import GarageSession
 from app.db.mongo_session import MongoSession
 from app.db.postgress_session import PostgresSession
@@ -79,19 +79,31 @@ async def lifespan(app: FastAPI):
     await postgres_session.dispose()
 
 
-app = FastAPI(title="Family OS", lifespan=lifespan)
+configure_sso()
+
+_docs_enabled = not auth_settings.is_production
+app = FastAPI(
+    title="Family OS",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 register_exception_handlers(app)
-app.add_middleware(CSRFMiddleware)
+# Sign-in / refresh / logout live in SSO (/api/auth/*, routed by Caddy / the Vite proxy).
+app.add_middleware(
+    CSRFMiddleware,
+    exempt_prefixes=("/health", "/api/familyos/health"),
+    settings=sso_settings,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", sso_settings.CSRF_HEADER_NAME],
 )
 app.include_router(main_router)
-# Local-dev cookie path: refresh_token is scoped to /api/auth
-app.include_router(auth_routes.router, prefix="/api")
 
 
 @app.get("/health")

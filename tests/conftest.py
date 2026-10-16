@@ -12,15 +12,20 @@ def _register_sqlmodel_tables():
 
 
 @pytest.fixture(autouse=True)
-def _mock_sso_me(monkeypatch):
-    """Avoid 5s HTTP connect timeouts to external localhost:8000 during test execution."""
-    from app.auth import dependencies, sso_client
+def fake_sso():
+    """Point the karan_sso SDK at an in-process fake SSO (JWKS + live /auth/me).
 
-    async def _mock_fetch(*args, **kwargs):
-        return {"role_name": "member", "name": "Test User"}
+    No test talks to a real SSO; tokens come from tests/sso_fakes.make_token.
+    """
+    from karan_sso import fastapi as sso_fastapi
 
-    monkeypatch.setattr(sso_client, "fetch_sso_me", _mock_fetch)
-    monkeypatch.setattr(dependencies, "fetch_sso_me", _mock_fetch)
+    from app.auth.sso import configure_sso
+    from tests.sso_fakes import FakeSso, sso_test_settings
+
+    fake = FakeSso()
+    sso_fastapi.configure(sso_test_settings(), http=fake.client_factory())
+    yield fake
+    configure_sso()
 
 
 @pytest.fixture

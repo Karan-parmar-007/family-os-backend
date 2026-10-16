@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 from uuid import UUID
-from datetime import datetime
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -31,21 +29,7 @@ class SessionResponse(BaseModel):
     email: str | None = None
     user_id: str | None = None
     role_name: str | None = None
+    # App-scoped SSO roles, e.g. {"familyos": ["admin"]}
+    app_roles: dict[str, list[str]] = Field(default_factory=dict)
     name: str | None = None
     profile: ProfileSummary | None = None
-
-
-class TokenProxyResponse(BaseModel):
-    """Response proxied from SSO refresh/logout."""
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    message: str
-    access_token_expires_in: int | None = None
-
-
-class MessageResponse(BaseModel):
-    """Generic message envelope."""
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    message: str
-    detail: Any = None

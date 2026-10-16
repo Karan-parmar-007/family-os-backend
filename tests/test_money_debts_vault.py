@@ -1,26 +1,17 @@
-import jwt
 import pytest
 import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi.testclient import TestClient
 from main import app
-from app.config import auth_settings
+from tests.sso_fakes import make_token
 from app.api.routes.profile.model import FosProfile
 from app.api.routes.user.model import UserBase, UserFamilyLink
 from app.api.routes.family.model import Family, FamilyTotalSavings
 
 
 def _create_token(user_id: str, email: str, role: str = "user") -> str:
-    secret = auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY
-    payload = {
-        "sub": user_id,
-        "user_id": user_id,
-        "email": email,
-        "role": role,
-        "type": "access",
-    }
-    return jwt.encode(payload, secret, algorithm=auth_settings.SSO_JWT_ALGORITHM)
+    return make_token(user_id, email, role=role)
 
 
 @pytest.mark.asyncio

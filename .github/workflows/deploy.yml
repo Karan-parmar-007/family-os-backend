@@ -19,7 +19,45 @@ env:
   SERVICE: familyos-backend
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: "Auth tests (hermetic: fake SSO, no DB)"
+        env:
+          POSTGRES_SERVER: localhost
+          POSTGRES_PORT: "1"
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+          MONGO_URI: mongodb://127.0.0.1:1
+          MONGO_DB_NAME: ci
+          GARAGE_ENDPOINT_URL: http://127.0.0.1:1
+          GARAGE_ACCESS_KEY: ci
+          GARAGE_SECRET_KEY: ci
+          GARAGE_BUCKET_NAME: ci
+          GARAGE_REGION_NAME: ci
+          SMTP_HOST: localhost
+          SMTP_PORT: "25"
+          SMTP_USERNAME: ci
+          SMTP_PASSWORD: ci
+          SMTP_FROM_EMAIL: ci@example.com
+          SMTP_FROM_NAME: ci
+        run: python -m pytest -q tests/test_sso_auth.py
+
   build-and-deploy:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

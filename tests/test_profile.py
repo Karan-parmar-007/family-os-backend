@@ -1,22 +1,13 @@
-from unittest.mock import patch
-import jwt
 import pytest
 from uuid import uuid4
 from fastapi.testclient import TestClient
 
-from app.config import auth_settings
+from tests.sso_fakes import make_token
 from main import app
 
 
 def _create_token(user_id: str, email: str) -> str:
-    secret = auth_settings.SSO_JWT_SECRET or auth_settings.SECRET_KEY
-    payload = {
-        "sub": user_id,
-        "user_id": user_id,
-        "email": email,
-        "type": "access",
-    }
-    return jwt.encode(payload, secret, algorithm=auth_settings.SSO_JWT_ALGORITHM)
+    return make_token(user_id, email)
 
 
 def test_get_me_unauthenticated():
@@ -92,8 +83,7 @@ def test_profile_setup_flow():
         assert res_me.json()["id"] == profile["id"]
 
         # 5. GET /api/familyos/auth/session returns profile summary
-        with patch("app.auth.dependencies.fetch_sso_me", return_value={"role_name": "member", "name": "Karan Tester"}):
-            res_session = client.get("/api/familyos/auth/session")
+        res_session = client.get("/api/familyos/auth/session")
         assert res_session.status_code == 200
         sess_data = res_session.json()
         assert sess_data["authenticated"] is True
