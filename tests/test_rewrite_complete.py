@@ -18,28 +18,46 @@ def test_at_eighteen_kolkata_is_1230_utc():
     assert snapped.minute == 30
 
 
-@pytest.mark.asyncio
-async def test_transfer_create_does_not_execute():
+def _transfer_service(via_code: bool):
     from app.api.routes.transfer.transfer_service import TransferService
-    from app.api.routes.transfer.transfer_schemas import TransferCreateRequest
 
     svc = TransferService(MagicMock())
-    svc._validate_and_gate = AsyncMock()
+    svc._existing_by_key = AsyncMock(return_value=None)
+    svc._is_member = AsyncMock(return_value=True)
+    svc._resolve_destination = AsyncMock(return_value=(uuid4(), None, via_code))
+    svc._notify_offer = AsyncMock()
     svc.execute_transfer_run = AsyncMock()
     svc.pg_session.add = MagicMock()
     svc.pg_session.flush = AsyncMock()
     svc.pg_session.commit = AsyncMock()
     svc.pg_session.refresh = AsyncMock()
+    return svc
 
-    req = TransferCreateRequest(
-        from_scope="FAMILY",
-        to_scope="FAMILY",
-        to_family_id=uuid4(),
-        amount=Decimal("10"),
+
+def _family_request():
+    from app.api.routes.transfer.transfer_schemas import TransferCreateRequest
+
+    return TransferCreateRequest(
+        from_scope="FAMILY", to_scope="FAMILY", to_family_id=uuid4(), amount=Decimal("10")
     )
-    result = await svc.create_transfer(uuid4(), uuid4(), req)
+
+
+@pytest.mark.asyncio
+async def test_direct_transfer_executes_immediately():
+    svc = _transfer_service(via_code=False)
+    await svc.create_transfer(uuid4(), uuid4(), _family_request())
+    svc.execute_transfer_run.assert_awaited_once()
+    svc._notify_offer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_code_transfer_waits_for_receiver():
+    svc = _transfer_service(via_code=True)
+    result = await svc.create_transfer(uuid4(), uuid4(), _family_request())
     svc.execute_transfer_run.assert_not_awaited()
+    svc._notify_offer.assert_awaited_once()
     assert result.status == TRANSFER_STATUS_PENDING
+    assert result.via_code is True
 
 
 def test_fos_tick_accepts_force_flag():

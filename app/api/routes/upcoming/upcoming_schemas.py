@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from app.api.schemas.pagination import CamelPaginatedResponse
+
 
 class UpcomingItem(BaseModel):
     type: str  # INCOME, EXPENSE, DEBT_EMI, INSURANCE_PREMIUM, PLAN_CONTRIB, GOAL_CONTRIB, AUTO_TRANSFER
@@ -21,8 +23,7 @@ class UpcomingItem(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
-class UpcomingResponse(BaseModel):
+class UpcomingResponse(CamelPaginatedResponse[UpcomingItem]):
     horizon_days: int
-    items: list[UpcomingItem]
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    total_in: Decimal = Decimal("0")
+    total_out: Decimal = Decimal("0")

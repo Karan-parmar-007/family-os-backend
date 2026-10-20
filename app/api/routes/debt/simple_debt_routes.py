@@ -12,6 +12,7 @@ from app.api.routes.debt.simple_debt_schemas import (
     DebtListResponse,
 )
 from app.api.routes.debt.simple_debt_service import SimpleDebtService
+from app.api.schemas.pagination import PaginationDep
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def get_debt_service(session: PGSessionDep) -> SimpleDebtService:
     return SimpleDebtService(session)
 
 
-def _format_debt(d) -> DebtResponse:
+def _format_debt(d, can_edit: bool = True) -> DebtResponse:
     amt = float(d.amount)
     paid = float(d.amount_paid)
     remaining = max(0.0, amt - paid)
@@ -38,9 +39,11 @@ def _format_debt(d) -> DebtResponse:
         remaining_amount=remaining,
         has_emi=d.has_emi,
         add_emi_to_paid=d.add_emi_to_paid,
+        category_id=d.category_id,
         linked_rule_id=d.linked_rule_id,
         document_id=d.document_id,
         let_everyone_edit=d.let_everyone_edit,
+        can_edit=can_edit,
         created_by=d.created_by,
         status=d.status,
         created_at=d.created_at,
@@ -61,13 +64,28 @@ async def create_debt(
 @router.get("", response_model=DebtListResponse)
 async def list_debts(
     current_user: CurrentUserDep,
+    pagination: PaginationDep,
     scope: str = Query(default="FAMILY"),
     family_id: Optional[UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
+    category_id: Optional[UUID] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=100),
     service: SimpleDebtService = Depends(get_debt_service),
 ) -> DebtListResponse:
-    items, total = await service.list_debts(current_user.id, scope=scope, family_id=family_id, status_filter=status)
-    return DebtListResponse(items=[_format_debt(d) for d in items], total=total)
+    items, total, is_head = await service.list_debts(
+        current_user.id,
+        scope=scope,
+        family_id=family_id,
+        status_filter=status,
+        pagination=pagination,
+        category_id=category_id,
+        q=q,
+    )
+    return DebtListResponse.from_page(
+        [_format_debt(d, await service.can_edit(current_user.id, d, is_head=is_head)) for d in items],
+        total=total,
+        pagination=pagination,
+    )
 
 
 @router.patch("/{debt_id}", response_model=DebtResponse)

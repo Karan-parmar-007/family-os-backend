@@ -96,6 +96,14 @@ async def setup_profile(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Profile already exists. Use PATCH /me to update.",
             )
+        if str(exc) == "email_in_use":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A Family OS profile already uses this email under a different "
+                    "sign-in account. Ask the owner to re-link it."
+                ),
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     from app.core.constants import POOL_PERSONAL

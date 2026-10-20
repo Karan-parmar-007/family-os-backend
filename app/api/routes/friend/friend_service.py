@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.friend.friend_schemas import FriendRequestByCode
@@ -8,6 +8,7 @@ from app.api.routes.friend.model import Friendship, canonical_user_pair
 from app.api.routes.profile.model import FosProfile
 from app.api.routes.scheduler.model import Notification
 from app.api.routes.user.model import UserFamilyLink
+from app.api.schemas.pagination import PaginationParams
 from app.core.constants import NOTIF_STATUS_UNREAD
 
 FRIEND_PENDING = "PENDING"
@@ -30,31 +31,40 @@ class FriendService:
         profile = await self.pg_session.get(FosProfile, user_id)
         return profile.display_name if profile is not None else "Someone"
 
-    async def list_friendships(self, user_id: UUID) -> list[tuple[Friendship, FosProfile]]:
-        stmt = (
-            select(Friendship)
-            .where(
-                or_(Friendship.user_a_id == user_id, Friendship.user_b_id == user_id),
-                Friendship.status.in_([FRIEND_PENDING, FRIEND_ACTIVE]),
-            )
-            .order_by(Friendship.created_at.desc())
-        )
+    async def list_friendships(
+        self,
+        user_id: UUID,
+        pagination: PaginationParams | None = None,
+        *,
+        status: str | None = None,
+    ) -> tuple[list[tuple[Friendship, FosProfile]], int]:
+        statuses = [status] if status in (FRIEND_PENDING, FRIEND_ACTIVE) else [FRIEND_PENDING, FRIEND_ACTIVE]
+        filters = [
+            or_(Friendship.user_a_id == user_id, Friendship.user_b_id == user_id),
+            Friendship.status.in_(statuses),
+        ]
+        total = (
+            await self.pg_session.execute(select(func.count()).select_from(Friendship).where(*filters))
+        ).scalar_one()
+        stmt = select(Friendship).where(*filters).order_by(Friendship.created_at.desc(), Friendship.id.desc())
+        if pagination is not None:
+            stmt = stmt.offset(pagination.offset).limit(pagination.page_size)
         friendships = list((await self.pg_session.execute(stmt)).scalars().all())
-        result: list[tuple[Friendship, FosProfile]] = []
-        for friendship in friendships:
-            other_id = (
-                friendship.user_b_id
-                if friendship.user_a_id == user_id
-                else friendship.user_a_id
-            )
-            other = await self.pg_session.get(FosProfile, other_id)
-            if other is not None:
-                result.append((friendship, other))
-        return result
+        other_ids = [f.user_b_id if f.user_a_id == user_id else f.user_a_id for f in friendships]
+        profiles = {
+            p.id: p
+            for p in (
+                await self.pg_session.execute(select(FosProfile).where(FosProfile.id.in_(other_ids)))
+            ).scalars().all()
+        } if other_ids else {}
+        result = [
+            (f, profiles[oid]) for f, oid in zip(friendships, other_ids) if oid in profiles
+        ]
+        return result, total
 
     async def list_active_friends(self, user_id: UUID) -> list[FosProfile]:
-        rows = await self.list_friendships(user_id)
-        return [other for friendship, other in rows if friendship.status == FRIEND_ACTIVE]
+        rows, _ = await self.list_friendships(user_id, status=FRIEND_ACTIVE)
+        return [other for _, other in rows]
 
     async def request_by_code(
         self, user_id: UUID, request: FriendRequestByCode

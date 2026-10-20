@@ -27,6 +27,11 @@ class ProfileService:
         result = await self.pg_session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_email(self, email: str) -> FosProfile | None:
+        stmt = select(FosProfile).where(FosProfile.email == email)
+        result = await self.pg_session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_id(self, profile_id: UUID) -> FosProfile | None:
         stmt = select(FosProfile).where(FosProfile.id == profile_id)
         result = await self.pg_session.execute(stmt)
@@ -46,6 +51,10 @@ class ProfileService:
         existing = await self.get_by_sso_id(sso_user_id)
         if existing is not None:
             raise ValueError("profile_exists")
+        # Same email under another SSO account (account recreated in SSO):
+        # emails are unique here, so report it instead of failing the insert.
+        if await self.get_by_email(email) is not None:
+            raise ValueError("email_in_use")
 
         profile = FosProfile(
             sso_user_id=sso_user_id,

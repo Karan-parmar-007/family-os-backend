@@ -32,6 +32,7 @@ def is_app_admin(identity: SsoIdentity) -> bool:
 __all__ = [
     "AdminDep",
     "AuthenticatedDep",
+    "IdentityDep",
     "OptionalIdentityDep",
     "OwnerDep",
     "SsoIdentity",

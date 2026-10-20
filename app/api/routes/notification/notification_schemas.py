@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from app.api.schemas.pagination import PaginatedResponse
+from app.api.schemas.pagination import CamelPaginatedResponse
 
 
 class NotificationResponse(BaseModel):
@@ -44,7 +44,7 @@ class NotificationResponse(BaseModel):
         return cls.model_validate(data)
 
 
-class NotificationListResponse(PaginatedResponse[NotificationResponse]):
+class NotificationListResponse(CamelPaginatedResponse[NotificationResponse]):
     pass
 
 

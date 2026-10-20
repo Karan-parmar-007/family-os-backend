@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.all_dependencies.login_required import LoggedInUserDep
 from app.api.dependencies import FriendServiceDep
@@ -13,6 +13,7 @@ from app.api.routes.friend.friend_schemas import (
     FriendUserOption,
 )
 from app.api.routes.friend.friend_service import FRIEND_ACTIVE
+from app.api.schemas.pagination import PaginationDep
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -53,10 +54,16 @@ async def get_my_friend_code(
 async def list_friends(
     user: LoggedInUserDep,
     friend_service: FriendServiceDep,
+    pagination: PaginationDep,
+    status_filter: str | None = Query(default=None, alias="status", description="PENDING | ACTIVE"),
 ) -> FriendshipListResponse:
-    rows = await friend_service.list_friendships(user.id)
-    return FriendshipListResponse(
-        items=[_direction(user.id, f, other.display_name) for f, other in rows]
+    rows, total = await friend_service.list_friendships(
+        user.id, pagination, status=(status_filter or "").upper() or None
+    )
+    return FriendshipListResponse.from_page(
+        [_direction(user.id, f, other.display_name) for f, other in rows],
+        total=total,
+        pagination=pagination,
     )
 
 

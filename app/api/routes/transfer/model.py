@@ -13,8 +13,8 @@ class Transfer(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid6.uuid7, primary_key=True)
     # Nullable for pure PERSONAL↔PERSONAL transfers.
-    family_id: Optional[UUID] = Field(default=None, foreign_key="families.id", index=True)
-    to_family_id: Optional[UUID] = Field(default=None, foreign_key="families.id", index=True)
+    family_id: Optional[UUID] = Field(default=None, foreign_key="families.id")
+    to_family_id: Optional[UUID] = Field(default=None, foreign_key="families.id")
     from_scope: str
     from_user_id: Optional[UUID] = Field(default=None, foreign_key="users.id")
     to_scope: str
@@ -37,6 +37,14 @@ class Transfer(SQLModel, table=True):
     requires_confirmation: bool = Field(default=True)  # Plan 08
     show_breakdown_to_receiver: bool = Field(default=True)  # Plan 08
     note: Optional[str] = Field(default=None)  # Plan 08
+    # Destination came from a code: the receiver must accept before money moves.
+    via_code: bool = Field(default=False)
+    idempotency_key: Optional[str] = Field(default=None, max_length=64)
+    parent_id: Optional[UUID] = Field(default=None, foreign_key="transfers.id", ondelete="SET NULL")
+    completed_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    failure_reason: Optional[str] = Field(default=None, max_length=255)
     status: str = Field(default="PENDING")
     document_id: Optional[UUID] = Field(default=None, foreign_key="documents.id")
     created_by: UUID = Field(foreign_key="users.id")

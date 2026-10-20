@@ -1,7 +1,7 @@
-"""Personal assets routes — /api/personal/assets (Plan 03)."""
+"""Personal assets — private to the signed-in user across families."""
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.all_dependencies.login_required import LoggedInUserDep
 from app.api.dependencies import AssetsServiceDep
@@ -22,12 +22,13 @@ async def list_personal_assets(
     user: LoggedInUserDep,
     assets_service: AssetsServiceDep,
     pagination: PaginationDep,
+    category_id: UUID | None = Query(default=None),
 ) -> AssetListResponse:
     items, total, total_value = await assets_service.list_personal_assets(
-        user.id, pagination
+        user.id, pagination, category_id=category_id
     )
     return AssetListResponse.from_page(
-        [_resp(a, True) for a in items],
+        [_resp(a, True, can_edit=True) for a in items],
         total=total,
         pagination=pagination,
     ).model_copy(update={"total_value": total_value})
@@ -41,7 +42,7 @@ async def create_personal_asset(
     family_id: UUID,
 ) -> AssetResponse:
     asset = await assets_service.create_personal_asset(user.id, family_id, request)
-    return _resp(asset, True)
+    return _resp(asset, True, can_edit=True)
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
@@ -53,7 +54,7 @@ async def get_personal_asset(
     asset = await assets_service.get_personal_asset(asset_id, user.id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return _resp(asset, True)
+    return _resp(asset, True, can_edit=True)
 
 
 @router.patch("/{asset_id}", response_model=AssetResponse)
@@ -66,8 +67,8 @@ async def update_personal_asset(
     asset = await assets_service.get_personal_asset(asset_id, user.id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    updated = await assets_service.update_asset(asset, request)
-    return _resp(updated, True)
+    updated = await assets_service.update_asset(asset, request, actor_id=user.id)
+    return _resp(updated, True, can_edit=True)
 
 
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)

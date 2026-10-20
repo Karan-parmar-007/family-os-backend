@@ -63,18 +63,36 @@ def can_view_scoped_entity(
     return False
 
 
+def can_edit_shared(
+    *,
+    actor_id: UUID,
+    creator_id: UUID | None,
+    is_head: bool,
+    let_everyone_edit: bool,
+) -> bool:
+    """Family-shared item rule: creator and heads always; others only if opted in."""
+    return let_everyone_edit or actor_id == creator_id or is_head
+
+
 def can_edit_scoped_entity(
     ctx: ScopeContext,
     *,
     scope_type: str,
     owner_user_id: UUID | None = None,
     access_level: str = "FAMILY",
+    created_by: UUID | None = None,
+    let_everyone_edit: bool = False,
 ) -> bool:
-    if owner_user_id == ctx.user_id:
+    if owner_user_id == ctx.user_id or (created_by is not None and created_by == ctx.user_id):
         return True
-    if ctx.is_family_manager:
-        return access_level != "PRIVATE" or owner_user_id == ctx.user_id
-    return False
+    if access_level == "PRIVATE":
+        return False
+    return can_edit_shared(
+        actor_id=ctx.user_id,
+        creator_id=created_by,
+        is_head=ctx.is_family_manager,
+        let_everyone_edit=let_everyone_edit,
+    )
 
 
 T = TypeVar("T")
@@ -146,12 +164,28 @@ def assert_entity_visible(ctx: ScopeContext, row: object, *, is_personal: bool) 
 
 
 def assert_entity_editable(ctx: ScopeContext, row: object, *, is_personal: bool) -> None:
+    if is_personal:
+        if getattr(row, "user_id", None) != ctx.user_id:
+            raise PermissionError("Only the owner can edit this personal item")
+        return
     assert_can_edit(
         ctx,
         scope_type=row.scope_type,
         owner_user_id=owner_user_id_for_row(row, is_personal=is_personal),
         access_level=getattr(row, "access_level", "FAMILY"),
+        created_by=getattr(row, "created_by", None),
+        let_everyone_edit=bool(getattr(row, "let_everyone_edit", False)),
     )
+
+
+def entity_can_edit(ctx: ScopeContext | None, row: object, *, is_personal: bool) -> bool:
+    if ctx is None:
+        return False
+    try:
+        assert_entity_editable(ctx, row, is_personal=is_personal)
+    except PermissionError:
+        return False
+    return True
 
 
 def assert_income_log_visible(ctx: ScopeContext, log) -> None:
@@ -237,6 +271,7 @@ async def require_entity_editable(
     is_personal: bool,
 ) -> ScopeContext | None:
     ctx = await load_scope_context(session, user_id, family_id)
-    if ctx is not None:
-        assert_entity_editable(ctx, row, is_personal=is_personal)
+    if ctx is None:
+        raise PermissionError("Not a member of this family")
+    assert_entity_editable(ctx, row, is_personal=is_personal)
     return ctx

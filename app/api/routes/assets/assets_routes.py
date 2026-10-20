@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.all_dependencies.part_of_the_family import LoggedInFamilyMemberDep
 from app.api.dependencies import AssetsServiceDep
@@ -12,17 +12,31 @@ from app.api.routes.assets.assets_schemas import (
     AssetUpdateRequest,
 )
 from app.api.schemas.pagination import PaginationDep
-from app.core.scope import load_scope_context, require_entity_editable, require_entity_visible
+from app.core.scope import (
+    ScopeContext,
+    entity_can_edit,
+    load_scope_context,
+    require_entity_editable,
+    require_entity_visible,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/families/{family_id}/assets", tags=["assets"])
 
 
-def _resp(asset, is_personal: bool) -> AssetResponse:
+def _resp(asset, is_personal: bool, *, can_edit: bool) -> AssetResponse:
     data = asset.model_dump()
     data["is_personal"] = is_personal
+    data["can_edit"] = can_edit
     return AssetResponse.model_validate(data)
+
+
+async def _ctx(assets_service, user_id: UUID, family_id: UUID) -> ScopeContext:
+    ctx = await load_scope_context(assets_service.pg_session, user_id, family_id)
+    if ctx is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this family")
+    return ctx
 
 
 @router.get("", response_model=AssetListResponse)
@@ -31,15 +45,14 @@ async def list_assets(
     assets_service: AssetsServiceDep,
     pagination: PaginationDep,
     family_id: UUID,
+    category_id: UUID | None = Query(default=None),
 ) -> AssetListResponse:
-    scope_ctx = await load_scope_context(
-        assets_service.pg_session, family_member.id, family_id
-    )
+    ctx = await _ctx(assets_service, family_member.id, family_id)
     items, total, total_value = await assets_service.list_assets(
-        family_id, pagination, scope_ctx=scope_ctx
+        family_id, pagination, scope_ctx=ctx, category_id=category_id
     )
     return AssetListResponse.from_page(
-        [_resp(a, p) for a, p in items],
+        [_resp(a, p, can_edit=entity_can_edit(ctx, a, is_personal=p)) for a, p in items],
         total=total,
         pagination=pagination,
     ).model_copy(update={"total_value": total_value})
@@ -52,10 +65,8 @@ async def create_asset(
     request: AssetCreateRequest,
     family_id: UUID,
 ) -> AssetResponse:
-    asset, is_personal = await assets_service.create_asset(
-        family_id, family_member.id, request
-    )
-    return _resp(asset, is_personal)
+    asset, is_personal = await assets_service.create_asset(family_id, family_member.id, request)
+    return _resp(asset, is_personal, can_edit=True)
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
@@ -70,12 +81,12 @@ async def get_asset(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     asset, is_personal = found
     try:
-        await require_entity_visible(
+        ctx = await require_entity_visible(
             assets_service.pg_session, family_member.id, family_id, asset, is_personal=is_personal
         )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    return _resp(asset, is_personal)
+    return _resp(asset, is_personal, can_edit=entity_can_edit(ctx, asset, is_personal=is_personal))
 
 
 @router.patch("/{asset_id}", response_model=AssetResponse)
@@ -91,13 +102,15 @@ async def update_asset(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     asset, is_personal = found
     try:
-        await require_entity_editable(
+        ctx = await require_entity_editable(
             assets_service.pg_session, family_member.id, family_id, asset, is_personal=is_personal
         )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    updated = await assets_service.update_asset(asset, request)
-    return _resp(updated, is_personal)
+    updated = await assets_service.update_asset(
+        asset, request, actor_id=family_member.id, is_head=bool(ctx and ctx.is_family_manager)
+    )
+    return _resp(updated, is_personal, can_edit=True)
 
 
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)

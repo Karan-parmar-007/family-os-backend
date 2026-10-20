@@ -4,7 +4,7 @@ import logging
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.profile.model import FosProfile
@@ -16,6 +16,7 @@ from app.api.routes.admin.admin_schemas import (
     AdminUserFamilyItem,
     AdminUserSummary,
 )
+from app.api.schemas.pagination import PaginationParams
 from app.api.routes.currency.currency_schemas import (
     CurrencyCreateRequest,
     CurrencyUpdateRequest,
@@ -29,46 +30,66 @@ class AdminService:
         self.session = session
 
     # ──────── Users ────────
-    async def list_users(self) -> list[AdminUserSummary]:
-        stmt = select(FosProfile).order_by(FosProfile.created_at.desc())
-        profiles = (await self.session.execute(stmt)).scalars().all()
+    async def list_users(
+        self, pagination: PaginationParams, q: str | None = None
+    ) -> tuple[list[AdminUserSummary], int]:
+        filters = []
+        if q and q.strip():
+            term = f"%{q.strip().lower()}%"
+            filters.append(
+                or_(
+                    func.lower(FosProfile.email).like(term),
+                    func.lower(FosProfile.display_name).like(term),
+                    func.lower(FosProfile.personal_code).like(term),
+                )
+            )
+        total = (
+            await self.session.execute(select(func.count()).select_from(FosProfile).where(*filters))
+        ).scalar_one()
+        profiles = (
+            await self.session.execute(
+                select(FosProfile)
+                .where(*filters)
+                .order_by(FosProfile.created_at.desc(), FosProfile.id.desc())
+                .offset(pagination.offset)
+                .limit(pagination.page_size)
+            )
+        ).scalars().all()
 
-        results: list[AdminUserSummary] = []
-        for p in profiles:
-            # Query family links for this profile
+        by_user: dict[UUID, list[AdminUserFamilyItem]] = {p.id: [] for p in profiles}
+        if by_user:
             link_stmt = (
                 select(UserFamilyLink, Family)
                 .join(Family, Family.id == UserFamilyLink.family_id)
-                .where(UserFamilyLink.user_id == p.id)
+                .where(UserFamilyLink.user_id.in_(list(by_user)))
             )
-            links = (await self.session.execute(link_stmt)).all()
-
-            families_list = [
-                AdminUserFamilyItem(
-                    id=fam.id,
-                    name=fam.name,
-                    is_family_manager=link.is_family_manager,
-                    joined_at=link.created_at,
+            for link, fam in (await self.session.execute(link_stmt)).all():
+                by_user[link.user_id].append(
+                    AdminUserFamilyItem(
+                        id=fam.id,
+                        name=fam.name,
+                        is_family_manager=link.is_family_manager,
+                        joined_at=link.created_at,
+                    )
                 )
-                for link, fam in links
-            ]
 
-            results.append(
-                AdminUserSummary(
-                    id=p.id,
-                    sso_user_id=p.sso_user_id,
-                    email=p.email,
-                    display_name=p.display_name,
-                    personal_currency=p.personal_currency,
-                    timezone=p.timezone,
-                    personal_code=p.personal_code,
-                    max_family_memberships=p.max_family_memberships,
-                    family_count=len(families_list),
-                    families=families_list,
-                    created_at=p.created_at,
-                )
+        results = [
+            AdminUserSummary(
+                id=p.id,
+                sso_user_id=p.sso_user_id,
+                email=p.email,
+                display_name=p.display_name,
+                personal_currency=p.personal_currency,
+                timezone=p.timezone,
+                personal_code=p.personal_code,
+                max_family_memberships=p.max_family_memberships,
+                family_count=len(by_user[p.id]),
+                families=by_user[p.id],
+                created_at=p.created_at,
             )
-        return results
+            for p in profiles
+        ]
+        return results, total
 
     async def update_user_cap(self, user_id: UUID, new_cap: int) -> FosProfile | None:
         stmt = select(FosProfile).where(FosProfile.id == user_id)
@@ -145,41 +166,56 @@ class AdminService:
         return True, "User deleted successfully"
 
     # ──────── Families ────────
-    async def list_families(self) -> list[AdminFamilySummary]:
-        stmt = select(Family).order_by(Family.created_at.desc())
-        families = (await self.session.execute(stmt)).scalars().all()
-
-        results: list[AdminFamilySummary] = []
-        for fam in families:
-            # Member count
-            count_stmt = select(func.count(UserFamilyLink.user_id)).where(
-                UserFamilyLink.family_id == fam.id
+    async def list_families(
+        self, pagination: PaginationParams, q: str | None = None
+    ) -> tuple[list[AdminFamilySummary], int]:
+        filters = []
+        if q and q.strip():
+            filters.append(func.lower(Family.name).contains(q.strip().lower(), autoescape=True))
+        total = (
+            await self.session.execute(select(func.count()).select_from(Family).where(*filters))
+        ).scalar_one()
+        families = (
+            await self.session.execute(
+                select(Family)
+                .where(*filters)
+                .order_by(Family.created_at.desc(), Family.id.desc())
+                .offset(pagination.offset)
+                .limit(pagination.page_size)
             )
-            member_count = (await self.session.execute(count_stmt)).scalar() or 0
-
-            # Head name
+        ).scalars().all()
+        ids = [f.id for f in families]
+        counts: dict[UUID, int] = {}
+        heads: dict[UUID, str] = {}
+        if ids:
+            count_stmt = (
+                select(UserFamilyLink.family_id, func.count())
+                .where(UserFamilyLink.family_id.in_(ids))
+                .group_by(UserFamilyLink.family_id)
+            )
+            counts = dict((await self.session.execute(count_stmt)).all())
             head_stmt = (
-                select(UserBase.name)
-                .join(UserFamilyLink, UserFamilyLink.user_id == UserBase.id)
-                .where(
-                    UserFamilyLink.family_id == fam.id,
-                    UserFamilyLink.is_family_manager == True,
-                )
+                select(UserFamilyLink.family_id, FosProfile.display_name)
+                .join(FosProfile, FosProfile.id == UserFamilyLink.user_id)
+                .where(UserFamilyLink.family_id.in_(ids), UserFamilyLink.is_family_manager.is_(True))
+                .order_by(UserFamilyLink.created_at)
             )
-            head_name = (await self.session.execute(head_stmt)).scalar_one_or_none()
+            for fid, name in (await self.session.execute(head_stmt)).all():
+                heads.setdefault(fid, name)
 
-            results.append(
-                AdminFamilySummary(
-                    id=fam.id,
-                    name=fam.name,
-                    currency=fam.currency,
-                    timezone=getattr(fam, "timezone", "Asia/Kolkata") or "Asia/Kolkata",
-                    member_count=member_count,
-                    head_name=head_name,
-                    created_at=fam.created_at,
-                )
+        results = [
+            AdminFamilySummary(
+                id=fam.id,
+                name=fam.name,
+                currency=fam.currency,
+                timezone=getattr(fam, "timezone", "Asia/Kolkata") or "Asia/Kolkata",
+                member_count=counts.get(fam.id, 0),
+                head_name=heads.get(fam.id),
+                created_at=fam.created_at,
             )
-        return results
+            for fam in families
+        ]
+        return results, total
 
     async def delete_family(self, family_id: UUID) -> bool:
         """Full cascade delete of a family."""
@@ -201,7 +237,18 @@ class AdminService:
         from app.api.routes.insurance.model import FamilyInsurance, PersonalInsurance
         from app.api.routes.family.model import FamilyRelationship
         from app.api.routes.scheduler.model import ScheduledJob
+        from app.api.routes.assets.model import FamilyAssets, PersonalAsset
+        from app.api.routes.insurance.model import FosInsuranceInstallment
 
+        family_ins = select(FamilyInsurance.id).where(FamilyInsurance.family_id == family_id)
+        personal_ins = select(PersonalInsurance.id).where(PersonalInsurance.family_id == family_id)
+        await self.session.execute(
+            delete(FosInsuranceInstallment).where(
+                FosInsuranceInstallment.insurance_id.in_(family_ins.union(personal_ins))
+            )
+        )
+        await self.session.execute(delete(FamilyAssets).where(FamilyAssets.family_id == family_id))
+        await self.session.execute(delete(PersonalAsset).where(PersonalAsset.family_id == family_id))
         await self.session.execute(delete(ScheduledJob).where(ScheduledJob.family_id == family_id))
         await self.session.execute(delete(FosVaultItem).where(FosVaultItem.family_id == family_id))
         await self.session.execute(delete(FosDebt).where(FosDebt.family_id == family_id))
@@ -233,9 +280,26 @@ class AdminService:
         return True
 
     # ──────── Currencies ────────
-    async def list_currencies(self) -> list[FosCurrency]:
-        stmt = select(FosCurrency).order_by(FosCurrency.code)
-        return list((await self.session.execute(stmt)).scalars().all())
+    async def list_currencies(
+        self, pagination: PaginationParams, q: str | None = None
+    ) -> tuple[list[FosCurrency], int]:
+        filters = []
+        if q and q.strip():
+            term = f"%{q.strip().lower()}%"
+            filters.append(or_(func.lower(FosCurrency.code).like(term), func.lower(FosCurrency.name).like(term)))
+        total = (
+            await self.session.execute(select(func.count()).select_from(FosCurrency).where(*filters))
+        ).scalar_one()
+        rows = (
+            await self.session.execute(
+                select(FosCurrency)
+                .where(*filters)
+                .order_by(FosCurrency.code)
+                .offset(pagination.offset)
+                .limit(pagination.page_size)
+            )
+        ).scalars().all()
+        return list(rows), total
 
     async def create_currency(self, req: CurrencyCreateRequest) -> FosCurrency:
         code = req.code.upper().strip()

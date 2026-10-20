@@ -75,3 +75,52 @@ def advance_next_date(
         return add_months(current, 12)
 
     return add_months(current, 1)
+
+
+FREQUENCY_UNITS: dict[str, tuple[str, int]] = {
+    "DAILY": ("DAY", 1),
+    "WEEKLY": ("DAY", 7),
+    "BIWEEKLY": ("DAY", 14),
+    "MONTHLY": ("MONTH", 1),
+    "QUARTERLY": ("MONTH", 3),
+    "HALF_YEARLY": ("MONTH", 6),
+    "YEARLY": ("MONTH", 12),
+}
+
+
+def normalize_frequency(raw: str | None) -> str:
+    freq = (raw or "MONTHLY").strip().upper()
+    aliases = {
+        "DAY": "DAILY",
+        "WEEK": "WEEKLY",
+        "BI_WEEKLY": "BIWEEKLY",
+        "FORTNIGHTLY": "BIWEEKLY",
+        "MONTH": "MONTHLY",
+        "QUARTER": "QUARTERLY",
+        "SEMIANNUAL": "HALF_YEARLY",
+        "SEMI_ANNUAL": "HALF_YEARLY",
+        "ANNUAL": "YEARLY",
+        "YEAR": "YEARLY",
+    }
+    freq = aliases.get(freq, freq)
+    if freq not in FREQUENCY_UNITS:
+        raise ValueError(f"Unsupported frequency: {raw}")
+    return freq
+
+
+def step_local_date(
+    current: datetime,
+    frequency: str,
+    *,
+    every_n: int = 1,
+    anchor_day: int | None = None,
+) -> datetime:
+    """One schedule step. Month steps land on ``anchor_day`` (clamped), so a
+    rule that starts on the 31st returns to the 31st after a short month."""
+    unit, size = FREQUENCY_UNITS[normalize_frequency(frequency)]
+    steps = size * max(1, every_n)
+    if unit == "DAY":
+        return current + timedelta(days=steps)
+    moved = add_months(current.replace(day=1), steps)
+    day = min(anchor_day or current.day, _days_in_month(moved.year, moved.month))
+    return moved.replace(day=day)

@@ -33,6 +33,12 @@ class _EmptyResult:
     def scalar_one_or_none(self) -> None:
         return None
 
+    def scalar_one(self) -> int:
+        return 0
+
+    def scalar(self) -> int:
+        return 0
+
 
 class _StubSession:
     async def execute(self, *_args: Any, **_kwargs: Any) -> _EmptyResult:
@@ -172,7 +178,7 @@ def test_admin_route_allows_admins(client, fake_sso, role_name, app_roles):
     fake_sso.set_user(USER_ID, role_name=role_name, app_roles=app_roles)
     res = client.get(ADMIN, headers=_bearer(make_token(USER_ID, "a@test.com")))
     assert res.status_code == 200
-    assert res.json() == {"items": []}
+    assert res.json() == {"items": [], "total": 0, "page": 1, "pageSize": 10, "totalPages": 0}
 
 
 def test_admin_route_ignores_other_apps_admin_role(client, fake_sso):

@@ -4,6 +4,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from app.api.schemas.pagination import CamelPaginatedResponse
+
 
 class DebtCreateRequest(BaseModel):
     scope: str = Field(default="FAMILY") # FAMILY | PERSONAL
@@ -16,6 +18,7 @@ class DebtCreateRequest(BaseModel):
     has_emi: bool = False
     emi_amount: Optional[float] = Field(default=None, gt=0)
     frequency: Optional[str] = Field(default="MONTHLY")
+    every_n: int = Field(default=1, ge=1, le=365)
     next_emi_date: Optional[datetime] = None
     add_emi_to_paid: bool = True
     category_id: Optional[UUID] = None
@@ -60,6 +63,7 @@ class DebtResponse(BaseModel):
     linked_rule_id: Optional[UUID] = None
     document_id: Optional[UUID] = None
     let_everyone_edit: bool
+    can_edit: bool = False
     created_by: UUID
     status: str
     created_at: datetime
@@ -71,11 +75,5 @@ class DebtResponse(BaseModel):
     )
 
 
-class DebtListResponse(BaseModel):
-    items: List[DebtResponse]
-    total: int
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
+class DebtListResponse(CamelPaginatedResponse[DebtResponse]):
+    pass

@@ -15,7 +15,9 @@ class FosVaultItem(SQLModel, table=True):
     owner_user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True))
     kind: str = Field(sa_column=Column(String(16), nullable=False)) # PASSWORD | FILE
     title: str = Field(sa_column=Column(String(255), nullable=False))
-    category: str = Field(sa_column=Column(String(64), nullable=False))
+    category: Optional[str] = Field(default=None, sa_column=Column(String(64), nullable=True))
+    category_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("fos_categories.id", ondelete="SET NULL"), nullable=True, index=True))
+    let_everyone_edit: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false"))
     for_party_type: str = Field(sa_column=Column(String(16), nullable=False)) # MEMBER | FAMILY | SELF
     for_user_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True))
     document_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("documents.id", ondelete="SET NULL"), nullable=True))

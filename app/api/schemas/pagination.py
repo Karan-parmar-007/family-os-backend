@@ -1,7 +1,8 @@
 from typing import Annotated, Generic, Self, TypeVar
 
 from fastapi import Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 T = TypeVar("T")
 
@@ -33,6 +34,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
         *,
         total: int,
         pagination: PaginationParams,
+        **extra,
     ) -> Self:
         total_pages = (total + pagination.page_size - 1) // pagination.page_size if total > 0 else 0
         return cls(
@@ -41,7 +43,14 @@ class PaginatedResponse(BaseModel, Generic[T]):
             page=pagination.page,
             page_size=pagination.page_size,
             total_pages=total_pages,
+            **extra,
         )
+
+
+class CamelPaginatedResponse(PaginatedResponse[T], Generic[T]):
+    """Same envelope, serialized as pageSize / totalPages."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 def get_pagination_params(

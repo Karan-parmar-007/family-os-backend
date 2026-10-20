@@ -21,8 +21,11 @@ class FamilyAssets(SQLModel, table=True):
     scope_type: str = Field(default="FAMILY")
 
     asset_name: str
-    type: str  # validated against ASSET_TYPES in assets_schemas.py
+    type: str  # category name snapshot; category_id is the link
+    category_id: Optional[UUID] = Field(default=None, foreign_key="fos_categories.id", index=True, ondelete="SET NULL")
     in_someone_name: Optional[UUID] = Field(default=None, foreign_key="users.id")
+    created_by: Optional[UUID] = Field(default=None, index=True)
+    let_everyone_edit: bool = Field(default=False)
 
     value: Decimal = Field(default=0, max_digits=12, decimal_places=2)
     quantity: Optional[Decimal] = Field(default=1, max_digits=12, decimal_places=4)
@@ -86,6 +89,7 @@ class PersonalAsset(SQLModel, table=True):
 
     asset_name: str
     type: str
+    category_id: Optional[UUID] = Field(default=None, foreign_key="fos_categories.id", index=True, ondelete="SET NULL")
 
     value: Decimal = Field(default=0, max_digits=12, decimal_places=2)
     quantity: Optional[Decimal] = Field(default=1, max_digits=12, decimal_places=4)

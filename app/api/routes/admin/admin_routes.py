@@ -1,6 +1,6 @@
 import logging
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, status
 
 from app.api.db_dependencies import PGSessionDep, GarageClientDep
 from app.auth.dependencies import AdminDep
@@ -18,6 +18,8 @@ from app.api.routes.currency.currency_schemas import (
 )
 from app.api.routes.admin.admin_service import AdminService
 from app.api.routes.currency.model import FosCurrency
+from app.api.routes.currency.currency_schemas import AdminCurrencyPage
+from app.api.schemas.pagination import PaginationDep
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,17 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 # ──────────────── Currencies ────────────────
-@router.get("/currencies", response_model=FosCurrencyListResponse, summary="List all currencies (admin)")
+@router.get("/currencies", response_model=AdminCurrencyPage, summary="List all currencies (admin)")
 async def admin_list_currencies(
     admin: AdminDep,
     session: PGSessionDep,
-) -> FosCurrencyListResponse:
+    pagination: PaginationDep,
+    q: str | None = Query(default=None, max_length=64),
+) -> AdminCurrencyPage:
     service = AdminService(session)
-    items = await service.list_currencies()
-    return FosCurrencyListResponse(
-        items=[FosCurrencyResponse.model_validate(c) for c in items]
+    items, total = await service.list_currencies(pagination, q)
+    return AdminCurrencyPage.from_page(
+        [FosCurrencyResponse.model_validate(c) for c in items], total=total, pagination=pagination
     )
 
 
@@ -117,10 +121,12 @@ async def admin_upload_currency_logo(
 async def admin_list_users(
     admin: AdminDep,
     session: PGSessionDep,
+    pagination: PaginationDep,
+    q: str | None = Query(default=None, max_length=100),
 ) -> AdminUserListResponse:
     service = AdminService(session)
-    users = await service.list_users()
-    return AdminUserListResponse(items=users)
+    users, total = await service.list_users(pagination, q)
+    return AdminUserListResponse.from_page(users, total=total, pagination=pagination)
 
 
 @router.patch("/users/{user_id}", response_model=dict, summary="Update user max_family_memberships")
@@ -159,10 +165,12 @@ async def admin_delete_user(
 async def admin_list_families(
     admin: AdminDep,
     session: PGSessionDep,
+    pagination: PaginationDep,
+    q: str | None = Query(default=None, max_length=100),
 ) -> AdminFamilyListResponse:
     service = AdminService(session)
-    families = await service.list_families()
-    return AdminFamilyListResponse(items=families)
+    families, total = await service.list_families(pagination, q)
+    return AdminFamilyListResponse.from_page(families, total=total, pagination=pagination)
 
 
 @router.delete("/families/{family_id}", summary="Delete family cascade")

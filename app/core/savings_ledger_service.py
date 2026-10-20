@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+import uuid6
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.family.model import (
@@ -114,40 +116,60 @@ class SavingsLedgerService:
         raise ValueError("Manual savings adjustments are disabled")
 
     async def _update_cache(self, pool: SavingsPoolRef, delta: Decimal) -> None:
-        row = await self._get_or_create_pool_row(pool)
+        row = await self._get_or_create_pool_row(pool, lock=True)
         row.total_savings = row.total_savings + delta
         await self.session.flush()
 
+    async def balance(self, pool: SavingsPoolRef, *, lock: bool = False) -> Decimal:
+        row = await self._get_or_create_pool_row(pool, lock=lock)
+        return Decimal(str(row.total_savings))
+
+    async def lock_pools(self, pools: list[SavingsPoolRef]) -> None:
+        """Lock several pools in a fixed order so two-sided moves can't deadlock."""
+        def key(p: SavingsPoolRef) -> tuple[str, str]:
+            return (p.pool_type, str(p.family_id or p.user_id))
+
+        for pool in sorted(set(pools), key=key):
+            await self._get_or_create_pool_row(pool, lock=True)
+
     async def _get_or_create_pool_row(
-        self, pool: SavingsPoolRef
+        self, pool: SavingsPoolRef, *, lock: bool = False
     ) -> FamilyTotalSavings | UserGlobalPersonalSavings:
         if pool.pool_type == POOL_FAMILY:
             if not pool.family_id:
                 raise ValueError("family_id required for FAMILY pool")
-            stmt = select(FamilyTotalSavings).where(FamilyTotalSavings.family_id == pool.family_id)
-            result = await self.session.execute(stmt)
-            row = result.scalar_one_or_none()
-            if row is None:
-                row = FamilyTotalSavings(family_id=pool.family_id, total_savings=Decimal("0"))
-                self.session.add(row)
-                await self.session.flush()
-            return row
-
-        if pool.pool_type == POOL_PERSONAL:
+            model, key_col, key = FamilyTotalSavings, "family_id", pool.family_id
+        elif pool.pool_type == POOL_PERSONAL:
             if not pool.user_id:
                 raise ValueError("user_id required for PERSONAL pool")
-            return await self._get_or_create_personal(pool.user_id)
+            model, key_col, key = UserGlobalPersonalSavings, "user_id", pool.user_id
+        else:
+            raise ValueError(f"Unknown pool_type: {pool.pool_type}")
 
-        raise ValueError(f"Unknown pool_type: {pool.pool_type}")
+        column = getattr(model, key_col)
+        stmt = select(model).where(column == key)
+        if lock:
+            stmt = stmt.with_for_update()
+        row = (await self.session.execute(stmt)).scalar_one_or_none()
+        if row is not None:
+            return row
+
+        await self.session.execute(
+            pg_insert(model.__table__)
+            .values(
+                id=uuid6.uuid7(),
+                **{key_col: key},
+                origin_amount=Decimal("0"),
+                total_savings=Decimal("0"),
+            )
+            .on_conflict_do_nothing(index_elements=[key_col])
+        )
+        stmt = select(model).where(column == key).execution_options(populate_existing=True)
+        if lock:
+            stmt = stmt.with_for_update()
+        return (await self.session.execute(stmt)).scalar_one()
 
     async def _get_or_create_personal(self, user_id: UUID) -> UserGlobalPersonalSavings:
-        stmt = select(UserGlobalPersonalSavings).where(
-            UserGlobalPersonalSavings.user_id == user_id
+        return await self._get_or_create_pool_row(  # type: ignore[return-value]
+            SavingsPoolRef(pool_type=POOL_PERSONAL, user_id=user_id)
         )
-        result = await self.session.execute(stmt)
-        row = result.scalar_one_or_none()
-        if row is None:
-            row = UserGlobalPersonalSavings(user_id=user_id, total_savings=Decimal("0"))
-            self.session.add(row)
-            await self.session.flush()
-        return row

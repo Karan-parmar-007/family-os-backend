@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
 
+from app.api.schemas.pagination import CamelPaginatedResponse
+
 
 class AdminUserFamilyItem(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -30,9 +32,8 @@ class AdminUserSummary(BaseModel):
     created_at: datetime
 
 
-class AdminUserListResponse(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-    items: List[AdminUserSummary]
+class AdminUserListResponse(CamelPaginatedResponse[AdminUserSummary]):
+    pass
 
 
 class AdminUserUpdateCapRequest(BaseModel):
@@ -62,6 +63,5 @@ class AdminFamilySummary(BaseModel):
     created_at: datetime
 
 
-class AdminFamilyListResponse(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-    items: List[AdminFamilySummary]
+class AdminFamilyListResponse(CamelPaginatedResponse[AdminFamilySummary]):
+    pass

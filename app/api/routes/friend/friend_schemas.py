@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from app.api.schemas.pagination import CamelPaginatedResponse
+
 
 class FriendRequestByCode(BaseModel):
     friend_code: str = Field(..., min_length=8, max_length=8)
@@ -37,13 +39,8 @@ class FriendshipResponse(BaseModel):
     )
 
 
-class FriendshipListResponse(BaseModel):
-    items: list[FriendshipResponse]
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
+class FriendshipListResponse(CamelPaginatedResponse[FriendshipResponse]):
+    pass
 
 
 class FriendUserOption(BaseModel):

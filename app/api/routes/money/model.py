@@ -1,10 +1,10 @@
 from typing import ClassVar, List, Optional
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 import uuid6
 from sqlmodel import Field, Relationship, SQLModel, func
-from sqlalchemy import Column, DateTime, String, Boolean, Numeric, ForeignKey
+from sqlalchemy import Column, Date, DateTime, Integer, SmallInteger, String, Boolean, Numeric, ForeignKey
 
 
 class FosMoneyRule(SQLModel, table=True):
@@ -17,9 +17,15 @@ class FosMoneyRule(SQLModel, table=True):
     kind: str = Field(sa_column=Column(String(16), nullable=False)) # INCOME | EXPENSE
     name: str = Field(sa_column=Column(String(255), nullable=False))
     amount: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
-    category_id: Optional[UUID] = Field(default=None)
+    category_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("fos_categories.id", ondelete="SET NULL"), nullable=True, index=True))
     frequency: str = Field(default="MONTHLY", sa_column=Column(String(32), nullable=False, server_default="MONTHLY"))
+    every_n: int = Field(default=1, sa_column=Column(SmallInteger, nullable=False, server_default="1"))
+    anchor_day: Optional[int] = Field(default=None, sa_column=Column(SmallInteger, nullable=True))
     next_run_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_run_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    run_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    end_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    max_runs: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
     document_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("documents.id", ondelete="SET NULL"), nullable=True))
     let_everyone_edit: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     created_by: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
@@ -59,12 +65,16 @@ class FosMoneyEvent(SQLModel, table=True):
     kind: str = Field(sa_column=Column(String(16), nullable=False)) # INCOME | EXPENSE
     name: str = Field(sa_column=Column(String(255), nullable=False))
     amount: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
-    category_id: Optional[UUID] = Field(default=None)
+    category_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("fos_categories.id", ondelete="SET NULL"), nullable=True, index=True))
     document_id: Optional[UUID] = Field(default=None, sa_column=Column(ForeignKey("documents.id", ondelete="SET NULL"), nullable=True))
     let_everyone_edit: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     occurred_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    # Local calendar date of the scheduled run; unique per rule (see fos009).
+    period_key: Optional[date] = Field(default=None, sa_column=Column(Date, nullable=True))
+    is_overdrawn: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false"))
     created_by: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False))
 
     parties: List["FosMoneyEventParty"] = Relationship(
         back_populates="event",

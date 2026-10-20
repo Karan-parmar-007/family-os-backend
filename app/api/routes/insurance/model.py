@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 import uuid6
 from sqlmodel import Field, Relationship, SQLModel, func
-from sqlalchemy import Column, DateTime
+from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
 
 
 class FamilyInsurance(SQLModel, table=True):
@@ -40,6 +40,36 @@ class FamilyInsurance(SQLModel, table=True):
 
     document_id: Optional[UUID] = Field(default=None, foreign_key="documents.id")
     access_level: str = Field(default="FAMILY")  # PRIVATE, FAMILY, SELECTED
+    category_id: Optional[UUID] = Field(default=None, foreign_key="fos_categories.id", index=True, ondelete="SET NULL")
+    schedule_mode: str = Field(default="NONE")  # NONE | INTERVAL | CUSTOM | LEGACY
+    annual_premium: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
+    created_by: Optional[UUID] = Field(default=None, index=True)
+    let_everyone_edit: bool = Field(default=False)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
+
+
+class FosInsuranceInstallment(SQLModel, table=True):
+    """One scheduled premium payment, charged by the scheduler when due."""
+
+    __tablename__: ClassVar[str] = "fos_insurance_installments"
+    __table_args__ = (
+        UniqueConstraint("insurance_id", "due_at", name="uq_fos_insurance_installments_due"),
+        CheckConstraint("amount > 0", name="ck_fos_insurance_installments_amount"),
+    )
+
+    id: UUID = Field(default_factory=uuid6.uuid7, primary_key=True)
+    insurance_id: UUID
+    is_personal: bool
+    due_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    amount: Decimal = Field(max_digits=12, decimal_places=2)
+    status: str = Field(default="PENDING")  # PENDING | PAID | CANCELLED
+    paid_event_id: Optional[UUID] = Field(default=None, foreign_key="fos_money_events.id", ondelete="SET NULL")
+    paid_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
@@ -111,6 +141,9 @@ class PersonalInsurance(SQLModel, table=True):
     document_id: Optional[UUID] = Field(default=None, foreign_key="documents.id")
     deducted_from: Optional[str] = Field(default=None)
     access_level: str = Field(default="PRIVATE")  # PRIVATE, FAMILY, SELECTED
+    category_id: Optional[UUID] = Field(default=None, foreign_key="fos_categories.id", index=True, ondelete="SET NULL")
+    schedule_mode: str = Field(default="NONE")  # NONE | INTERVAL | CUSTOM | LEGACY
+    annual_premium: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
